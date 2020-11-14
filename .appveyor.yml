@@ -1,6 +1,6 @@
-version: '2.4.3.{build}’
+version: '2.4.3.{build}'
 
-platform: macos
+os: macos
 
 # Do not build on tags (GitHub only)
 skip_tags: true
@@ -17,10 +17,11 @@ branches:
 
 
 environment:
-  - ARTISAN_OS=osx
+  ARTISAN_OS: osx
   osx_image: xcode10.1 # Xcode 10.1, macOS 10.13
   python: 3.8
   language: generic
+
 
 install:
   - export GIT_VERSION=`git rev-parse --verify --short HEAD 2>/dev/null|| echo "???"`
@@ -29,4 +30,3 @@ install:
 
 build_script:
   - .travis/script-${ARTISAN_OS}.sh
-
