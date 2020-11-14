@@ -17,8 +17,8 @@ branches:
 #  UPLOADTOOL_BODY:
 #    "WARNING: pre-release builds may not work. Use at your own risk.”
 
-artifacts:
-  - path: 'src\artisan-*.zip'
+#artifacts:
+#  - path: 'src\artisan-*.zip'
 
 for:
 #  -
