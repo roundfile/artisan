@@ -49,18 +49,18 @@ for:
 
 	environment:
 
-    - ARTISAN_OS=osx
-    osx_image: xcode10.1 # Xcode 10.1, macOS 10.13
-    python: 3.8
-    language: generic
+        - ARTISAN_OS=osx
+        osx_image: xcode10.1 # Xcode 10.1, macOS 10.13
+        python: 3.8
+        language: generic
 
     install:
-  - export GIT_VERSION=`git rev-parse --verify --short HEAD 2>/dev/null|| echo "???"`
-  - sed -i'' -e "s/__revision__ = '0'/__revision__ = '$GIT_VERSION'/" src/artisanlib/__init__.py
-  - .travis/install-${ARTISAN_OS}.sh
+      - export GIT_VERSION=`git rev-parse --verify --short HEAD 2>/dev/null|| echo "???"`
+      - sed -i'' -e "s/__revision__ = '0'/__revision__ = '$GIT_VERSION'/" src/artisanlib/__init__.py
+      - .travis/install-${ARTISAN_OS}.sh
 
     build_script:
-  - .travis/script-${ARTISAN_OS}.sh
+        - .travis/script-${ARTISAN_OS}.sh
 
 #    deploy_script:
 #    <macOS script>
