@@ -6,10 +6,10 @@ branches:
 #  - gh-pages
   - master
 
-addons:
-  apt:
-    packages:
-    - fakeroot
+#addons:
+#  apt:
+#    packages:
+#    - fakeroot
 
 matrix:
   allow_failures:
