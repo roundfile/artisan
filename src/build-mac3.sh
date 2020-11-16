@@ -5,7 +5,7 @@ set -e
 
 # add argument "legacy" to make a build that supports older OS X systems using an outdated Qt
 
-if [ ! -z $TRAVIS ]; then
+if [ ! -z $APPVEYOR ]; then
     # Travis CI builds
     export PYTHON=/usr/local
     export PYTHONBIN=$PYTHON/bin
