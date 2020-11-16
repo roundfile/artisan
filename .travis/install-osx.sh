@@ -34,9 +34,9 @@ python3 --version
 #brew install wget
 
 
-brew install p7zip
+#brew install p7zip
 
-python3 -m pip install --upgrade pip
+#python3 -m pip install --upgrade pip
 # to allow the installation of numpy >v1.15.4, avoiding the Permission denied: '/usr/local/bin/f2py' error, we run the following pip3 installs under sudo:
 # (an alternative could be to use pip install --user ..)
 # the lxml binaries are compiled with an SDK older than the 10.9 SDK which breaks the notarization
