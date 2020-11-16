@@ -19,7 +19,8 @@ branches:
 environment:
   ARTISAN_OS: osx
 #  osx_image: xcode10.1 # Xcode 10.1, macOS 10.13
-  python: 3.8
+#  python: 3.8
+  PYTHON: ~/venv3.8.3
   language: generic
   HOMEBREW_NO_INSTALL_CLEANUP: 1
   HOMEBREW_NO_ANALYTICS: 1
