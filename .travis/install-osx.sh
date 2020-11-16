@@ -11,7 +11,7 @@ set -ex # reduced logging
 # or, to avoid issues with brew auto updates by deactivating them,
 #HOMEBREW_NO_AUTO_UPDATE=1 brew install python
 
-brew uninstall numpy gdal postgis
+#brew uninstall numpy gdal postgis
 brew unlink python@2
 brew unlink python
 #brew upgrade python
