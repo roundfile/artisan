@@ -12,12 +12,12 @@ set -ex # reduced logging
 #HOMEBREW_NO_AUTO_UPDATE=1 brew install python
 
 #brew uninstall numpy gdal postgis
-brew unlink python@2
-brew unlink python
+#brew unlink python@2
+#brew unlink python
 #brew upgrade python
 
-brew install python@3.8
-brew link --force --overwrite python@3.8
+#brew install python@3.8
+#brew link --force --overwrite python@3.8
 
 hash -r
 which python3
