@@ -16,7 +16,7 @@ set -ex # reduced logging
 #brew unlink python
 #brew upgrade python
 
-brew install python@3.8
+#brew install python@3.8
 brew link --force --overwrite python@3.8
 
 hash -r
@@ -46,7 +46,8 @@ sudo -H python3 -m pip install -r src/requirements.txt
 # use a custom py2app v0.21 (Python3.8) with apptemplate main-x86_64 build for 
 # target 10.13 using MacOSX10.15.sdk build on macOS 10.15 to add dark-mode support to builds
 sudo -H python3 -m pip install .travis/py2app-0.21-py38-none-any.whl
-sudo -H python3 -m pip install -r src/requirements-${TRAVIS_OS_NAME}.txt
+# replaced sudo -H python3 -m pip install -r src/requirements-${TRAVIS_OS_NAME}.txt
+sudo -H python3 -m pip install -r src/requirements-${ARTISAN_OS}.txt
 #sudo rm -rf /usr/local/lib/python3.7/site-packages/matplotlib/mpl-data/sample_data
 sudo rm -rf /usr/local/opt/python@3.8/lib/python3.8/site-packages/matplotlib/mpl-data/sample_data
 sudo rm -rf /usr/local/opt/python@3.8/Frameworks/Python.framework/Versions/3.8/lib/python3.8/site-packages/matplotlib/mpl-data/sample_data
