@@ -4,7 +4,10 @@
 set -e
 
 # add argument "legacy" to make a build that supports older OS X systems using an outdated Qt
+echo "Next is appveyor"
 printf $APPVEYOR
+echo "prev was appveyor"
+
 if [ ! -z $APPVEYOR ]; then
     # Travis CI builds
     printf "Appveyor build"
