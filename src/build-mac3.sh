@@ -4,9 +4,10 @@
 set -e
 
 # add argument "legacy" to make a build that supports older OS X systems using an outdated Qt
-
+printf $APPVEYOR
 if [ ! -z $APPVEYOR ]; then
     # Travis CI builds
+    printf "Appveyor build"
     export PYTHON=/usr/local
     export PYTHONBIN=$PYTHON/bin
     export PYTHONPATH=$PYTHON/lib/python3.8
@@ -30,6 +31,7 @@ elif [[ "$1" = "legacy" ]]; then
     export ARTISAN_LEGACY_BUILD=true
 else
     # standard local builds
+    printf "Standard build"
     export PYTHON=/Library/Frameworks/Python.framework/Versions/3.8
 #    export PYTHON=/Users/luther/.pyenv/versions/3.8.2
     export PYTHONBIN=$PYTHON/bin
