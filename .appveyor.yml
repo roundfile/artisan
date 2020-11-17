@@ -1,6 +1,6 @@
 version: '2.4.3.{build}'
 
-os: macos
+os: Previous macOS
 
 # Do not build on tags (GitHub only)
 skip_tags: true
@@ -24,7 +24,7 @@ environment:
   language: generic
   HOMEBREW_NO_INSTALL_CLEANUP: 1
   HOMEBREW_NO_ANALYTICS: 1
-  MACOSX_DEPLOYMENT_TARGET: 10.15
+  MACOSX_DEPLOYMENT_TARGET: 10.13
 
 
 install:
