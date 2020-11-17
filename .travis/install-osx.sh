@@ -3,7 +3,7 @@
 set -ex # reduced logging
 #set -e # increased logging
 
-.travis/slience.sh brew update # this seems to help to work around some homebrew issues; and fails on others
+#.travis/slience.sh brew update # this seems to help to work around some homebrew issues; and fails on others
 
 # Python 3.7.5 is installed by default
 # to update use either:

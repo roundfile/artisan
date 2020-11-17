@@ -15,7 +15,7 @@ if [ ! -z $APPVEYOR ]; then
     
     export QT_PATH=${PYTHONPATH}/site-packages/PyQt5/Qt
     export QT_SRC_PATH=${QT_PATH}
-    export MACOSX_DEPLOYMENT_TARGET=10.13
+#    export MACOSX_DEPLOYMENT_TARGET=10.13
     export ARTISAN_LEGACY_BUILD=false
 elif [[ "$1" = "legacy" ]]; then
     echo "NOTICE: legacy build"
