@@ -36,4 +36,4 @@ build_script:
   - .travis/script-${ARTISAN_OS}.sh
   
 artifacts:
-  - path: 'src\artisan-*.dmz'
+  - path: 'src/artisan-*.dmg'
