@@ -1,11 +1,11 @@
 version: '2.4.3.{build}'
 
-image
-  - Visual Studio 2019
-  - macos
-
 # Do not build on tags (GitHub only)
 skip_tags: true
+
+image:
+  - Visual Studio 2019
+  - macos
 
 branches:
   only:
@@ -18,7 +18,7 @@ branches:
 #    "WARNING: pre-release builds may not work. Use at your own risk.”
 
 
-for
+for:
 -
   matrix:
     only:
