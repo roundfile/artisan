@@ -4,6 +4,7 @@ version: '2.4.3.{build}'
 skip_tags: true
 
 image:
+  -
   - Visual Studio 2019
   - macos
 
@@ -19,6 +20,21 @@ branches:
 
 
 for:
+-
+  matrix:
+    only:
+      - image: Ubuntu
+    fast_finish: true
+            python: 3.8 # NOTE: on update, update also the var PYTHON_PATH in src/build-linux.sh
+  environment:
+    ARTISAN_OS: linux
+  install:
+    - export GIT_VERSION=`git rev-parse --verify --short HEAD 2>/dev/null|| echo "???"`
+    - sed -i'' -e "s/__revision__ = '0'/__revision__ = '$GIT_VERSION'/" src/artisanlib/__init__.py
+    - .travis/install-${ARTISAN_OS}.sh
+  build_script:
+    - .travis/script-${ARTISAN_OS}.sh
+
 -
   matrix:
     only:
