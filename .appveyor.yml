@@ -2,6 +2,7 @@ version: '2.4.3.{build}'
 
 # Do not build on tags (GitHub only)
 skip_tags: true
+clone_depth: 1
 
 image:
   - Ubuntu1604
@@ -26,7 +27,7 @@ for:
 -
   matrix:
     only:
-      - image: Ubuntu
+      - image: Ubuntu1604
     fast_finish: true
 
   environment:
@@ -42,10 +43,9 @@ for:
 
 -
   matrix:
-    only:
-      - image: Visual Studio 2019
     except:
       - configuration: Config1
+      image: Visual Studio 2019
 
   environment:
     PYTHON: "C:\\Python38-x64"
@@ -106,10 +106,9 @@ for:
 
 -
   matrix:
-    only:
-      - image: macos
     except:
       - configuration: Config1
+      image: macos
 
   environment:
     ARTISAN_OS: osx
