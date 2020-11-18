@@ -5,8 +5,8 @@ skip_tags: true
 
 image:
   - Ubuntu
-  - Visual Studio 2019
-  - macos
+#  - Visual Studio 2019
+#  - macos
 
 branches:
   only:
