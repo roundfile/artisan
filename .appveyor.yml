@@ -4,10 +4,10 @@ version: '2.4.3.{build}'
 skip_tags: true
 clone_depth: 1
 
-#image:
-#  - Ubuntu1604
-#  - Visual Studio 2019
-#  - macos
+image:
+  - Ubuntu1604
+  - Visual Studio 2019
+  - macos
 
 branches:
   only:
