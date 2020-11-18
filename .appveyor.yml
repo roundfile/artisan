@@ -4,13 +4,16 @@ version: '2.4.3.{build}'
 skip_tags: true
 
 image:
-  - Ubuntu
+  - Ubuntu1604
   - Visual Studio 2019
   - macos
 
 branches:
   only:
-    - master
+    - master     
+        
+configuration:
+    - Config1
 
 #environment:
 #  GITHUB_TOKEN:
@@ -40,6 +43,8 @@ for:
   matrix:
     only:
       - image: Visual Studio 2019
+    except:
+      - Config1
 
   environment:
     PYTHON: "C:\\Python38-x64"
@@ -102,6 +107,8 @@ for:
   matrix:
     only:
       - image: macos
+    except:
+      - Config1
 
   environment:
     ARTISAN_OS: osx
