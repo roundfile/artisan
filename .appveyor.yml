@@ -14,9 +14,9 @@ branches:
     - master     
         
 # exclude configuration from the matrix. Works similarly to 'allow_failures' but build not even being started for excluded combination.
-  exclude:
-    - image: Visual Studio 2019
-    - image: macos
+exclude:
+  - image: Visual Studio 2019
+  - image: macos
 
 
 #environment:
