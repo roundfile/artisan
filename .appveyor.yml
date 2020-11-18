@@ -13,8 +13,11 @@ branches:
   only:
     - master     
         
-configuration:
-    Config1
+# exclude configuration from the matrix. Works similarly to 'allow_failures' but build not even being started for excluded combination.
+  exclude:
+    - image: Visual Studio 2019
+    - image: macos
+
 
 #environment:
 #  GITHUB_TOKEN:
@@ -43,9 +46,8 @@ for:
 
 -
   matrix:
-    except:
-      - configuration: Config1
-      image: Visual Studio 2019
+    only:
+      - image: Visual Studio 2019
 
   environment:
     PYTHON: "C:\\Python38-x64"
@@ -106,9 +108,10 @@ for:
 
 -
   matrix:
+    only:
+      - image: macos
     except:
       - configuration: Config1
-      image: macos
 
   environment:
     ARTISAN_OS: osx
