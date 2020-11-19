@@ -55,7 +55,7 @@ flavor." \
 -v ${VERSION} --prefix / usr etc
 
 # Allow FPM to write some temporary files
-fakeroot chmod o+w .
+sudo chmod o+w .
 fpm --deb-no-default-config-files -s dir -t deb -n artisan --license GPL3 -m "Marko Luther <marko.luther@gmx.net>" -p .. \
 --vendor "Artisan GitHub" \
 --no-auto-depends \
