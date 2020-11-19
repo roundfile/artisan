@@ -5,7 +5,7 @@ set -ex
 export LD_LIBRARY_PATH=$LD_LIBTRARY_PATH:/usr/local/lib
 export PATH=$PATH:$HOME/.local/bin
 
-if [ ! -z $TRAVIS ]; then
+if [ ! -z $APPVEYOR ]; then
     # Travis environment
     export PYTHON_PATH=/home/travis/virtualenv/python3.8/lib/python3.8/site-packages
     export QT_PATH=$PYTHON_PATH/PyQt5/Qt

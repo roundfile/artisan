@@ -21,7 +21,7 @@ branches:
 
 environment:
   ARTISAN_OS: linux
-#  python: 3.8 # NOTE: on update, update also the var PYTHON_PATH in src/build-linux.sh
+  python: 3.8 # NOTE: on update, update also the var PYTHON_PATH in src/build-linux.sh
 #  PYTHON: $HOME/venv3.8
 stack:
   python 3.8
