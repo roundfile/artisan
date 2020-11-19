@@ -24,9 +24,9 @@ tar -xf dist-centos64.tar -C debian/usr/share
 rm dist-centos64.tar
 mv debian/usr/share/dist debian/usr/share/artisan
 find debian -name .svn -exec rm -rf {} \; > /dev/null 2>&1
-fakeroot chown -R root:root debian
-fakeroot chmod -R go-w debian
-fakeroot chmod 0644 debian/usr/share/artisan/*.so*
+sudo chown -R root:root debian
+sudo chmod -R go-w debian
+sudo chmod 0644 debian/usr/share/artisan/*.so*
 rm -f ${NAME}*.rpm
 
 cd debian
