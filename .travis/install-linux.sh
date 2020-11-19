@@ -9,9 +9,9 @@ sudo apt-get install -y libdbus-1-3 libxkbcommon-x11-0 libxcb-icccm4 libxcb-imag
 
 gem install fpm
 pip install --upgrade pip
-pip install -r src/requirements.txt
-pip install -r src/requirements-${ARTISAN_OS}.txt
+#pip install -r src/requirements.txt
+#pip install -r src/requirements-${ARTISAN_OS}.txt
 
-.travis/install-libusb.sh
-.travis/install-phidgets.sh
+#.travis/install-libusb.sh
+#.travis/install-phidgets.sh
 .travis/install-snap7.sh
