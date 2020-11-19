@@ -26,14 +26,15 @@ environment:
 stack:
   python 3.8
 install:
-  - tree -d -L 3 '/home/appveyor/' 
-#  - export GIT_VERSION=`git rev-parse --verify --short HEAD 2>/dev/null|| echo "???"`
-#  - sed -i'' -e "s/__revision__ = '0'/__revision__ = '$GIT_VERSION'/" src/artisanlib/__init__.py
-#  - .travis/install-${ARTISAN_OS}.sh
-#build_script:
-#  - ls %APPVEYOR_BUILD_FOLDER%
-#  - .travis/script-${ARTISAN_OS}.sh
-#artifacts:
-#  - path: '/home/appveyor/projects/artisan/src/artisan-*.deb'
-#  - path: '/home/appveyor/projects/artisan/src/artisan-*.rpm'
-#
+#  - tree -d -L 3 '/home/appveyor/' 
+  - export GIT_VERSION=`git rev-parse --verify --short HEAD 2>/dev/null|| echo "???"`
+  - sed -i'' -e "s/__revision__ = '0'/__revision__ = '$GIT_VERSION'/" src/artisanlib/__init__.py
+  - .travis/install-${ARTISAN_OS}.sh
+build_script:
+  - ls %APPVEYOR_BUILD_FOLDER%
+  - .travis/script-${ARTISAN_OS}.sh
+  - ls '/home/appveyor/projects/artisan/src'
+artifacts:
+  - path: '/home/appveyor/projects/artisan/src/artisan-*.deb'
+  - path: '/home/appveyor/projects/artisan/src/artisan-*.rpm'
+
