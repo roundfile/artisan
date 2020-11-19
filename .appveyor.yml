@@ -38,6 +38,6 @@ build_script:
   - pwd
 artifacts:
 #  - path: 'tree.txt'
-  - path: '/home/appveyor/projects/artisan/src/artisan-*.deb'
-  - path: '/home/appveyor/projects/artisan/src/artisan-*.rpm'
+  - path: 'src/artisan-*.deb'
+  - path: 'src/artisan-*.rpm'
 
