@@ -34,6 +34,7 @@ install:
 build_script:
   - .travis/script-${ARTISAN_OS}.sh
   - ls '/home/appveyor/projects/artisan/src'
+  - ls '/home/appveyor/virtualenv/python3.8/lib/python3.8/site-packages'
 artifacts:
   - path: '/home/appveyor/projects/artisan/src/artisan-*.deb'
   - path: '/home/appveyor/projects/artisan/src/artisan-*.rpm'
