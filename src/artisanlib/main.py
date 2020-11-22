@@ -5765,6 +5765,7 @@ class tgraphcanvas(FigureCanvas):
                                 # https://github.com/numpy/numpy/issues/16744
                                 # original version just picking the corner values:
                                 print("Fallback #1")  #dave
+                                aw.qmc.adderror("Fallback #1")  #dave
                                 z1 = self.arrayRoR(tx_roast,nt1,dsET)
                     else:
                         if self.polyfitRoRcalc:
@@ -5776,6 +5777,7 @@ class tgraphcanvas(FigureCanvas):
                                 # https://github.com/numpy/numpy/issues/16744
                                 # original version just picking the corner values:
                                 print("Fallback #2")  #dave
+                                aw.qmc.adderror("Fallback #2")  #dave
                                 z1 = self.arrayRoR(tx_roast,nt1,dsET)
                         else:
                             z1 = self.arrayRoR(tx_roast,nt1,dsET)
@@ -5833,6 +5835,7 @@ class tgraphcanvas(FigureCanvas):
                                 # https://github.com/numpy/numpy/issues/16744
                                 # original version just picking the corner values
                                 print("Fallback #3")  #dave
+                                aw.qmc.adderror("Fallback #3")  #dave
                                 z2 = self.arrayRoR(tx_roast,nt2,dsBT)
                     else:
                         if self.polyfitRoRcalc:
@@ -5844,6 +5847,7 @@ class tgraphcanvas(FigureCanvas):
                                 # https://github.com/numpy/numpy/issues/16744
                                 # original version just picking the corner values
                                 print("Fallback #4")  #dave
+                                aw.qmc.adderror("Fallback #4")  #dave
                                 z2 = self.arrayRoR(tx_roast,nt2,dsBT)
                         else:
                             z2 = self.arrayRoR(tx_roast,nt2,dsBT)
@@ -13761,6 +13765,7 @@ class SampleThread(QThread):
                                     # https://github.com/numpy/numpy/issues/16744
                                     # we fall back to the two point algo
                                     print("Fallback #5")  #dave
+                                    aw.qmc.adderror("Fallback #5")  #dave
                                     timed = sample_ctimex1[-1] - sample_ctimex1[-left_index]   #time difference between last aw.qmc.deltaETsamples readings
                                     aw.qmc.rateofchange1 = ((sample_tstemp1[-1] - sample_tstemp1[-left_index])/timed)*60.  #delta ET (degress/minute)
                             else:
@@ -13796,6 +13801,7 @@ class SampleThread(QThread):
                                     # https://github.com/numpy/numpy/issues/16744
                                     # we fall back to the two point algo
                                     print("Fallback #6")  #dave
+                                    aw.qmc.adderror("Fallback #6")  #dave
                                     timed = sample_ctimex2[-1] - sample_ctimex2[-left_index]   #time difference between last aw.qmc.deltaBTsamples readings
                                     aw.qmc.rateofchange2 = ((sample_tstemp2[-1] - sample_tstemp2[-left_index])/timed)*60.  #delta BT (degress/minute)
                             else:
