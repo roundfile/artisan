@@ -37,7 +37,7 @@ for:
   #  - echo %PATH%
     - "%PYTHON%\\python.exe -m pip install --upgrade pip"
     - "%PYTHON%\\python.exe -m pip install wheel"
-    - "%PYTHON%\\python.exe -m pip install .travis\\pyinstaller-4.1.dev0+5988397383-py3-none-any.whl"
+    - "%PYTHON%\\python.exe -m pip install .travis\\pyinstaller-4.1+f9eeaaf9c0-py3-none-any.whl"
   ## start: build the pyinstaller bootloader and install (using the default VS 2015)
   #  - curl -L -O https://github.com/pyinstaller/pyinstaller/releases/download/v%PYINSTALLER_VER%/PyInstaller-%PYINSTALLER_VER%.tar.gz
   #  - tar xzf PyInstaller-%PYINSTALLER_VER%.tar.gz
@@ -88,8 +88,6 @@ for:
   matrix:
     only:
       - image: macos
-    except:
-      - configuration: Config1
 
   environment:
     ARTISAN_OS: osx
@@ -114,7 +112,7 @@ for:
   matrix:
     only:
       - image: Ubuntu1604
-    fast_finish: true
+#    fast_finish: true
 
   environment:
     ARTISAN_OS: linux
@@ -127,8 +125,10 @@ for:
   #  - 7z --help
     - export GIT_VERSION=`git rev-parse --verify --short HEAD 2>/dev/null|| echo "???"`
     - sed -i'' -e "s/__revision__ = '0'/__revision__ = '$GIT_VERSION'/" src/artisanlib/__init__.py
-    - .travis/install-${ARTISAN_OS}.sh
+#    - .travis/install-${ARTISAN_OS}.sh
+    - .travis/install-linux.sh
   build_script:
+    - pwd
     - .travis/script-${ARTISAN_OS}.sh
     - ls '/home/appveyor/projects/artisan/src'
   #  - ls '/home/appveyor/virtualenv/python3.8/lib/python3.8/site-packages'
