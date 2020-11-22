@@ -19,7 +19,7 @@ bytesize=8
 comport=COM5
 host=127.0.0.1
 input1bcd=false
-input1code=3
+input1code=4
 input1div=0
 input1float=false
 input1FloatsAsInt=false
@@ -27,7 +27,7 @@ input1mode=C
 input1register=0
 input1slave=1
 input2bcd=false
-input2code=3
+input2code=4
 input2div=0
 input2float=false
 input2FloatsAsInt=false
@@ -89,6 +89,8 @@ stopbits=1
 timeout=0.4
 type=0
 wordorderLittle=true
+optimizer=true
+fetch_max_blocks=false
 
 [RoastProperties]
 roastertype=\xd6zt\xfcrk OKS

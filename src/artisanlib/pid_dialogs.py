@@ -21,6 +21,7 @@ import time as libtime
 
 from artisanlib.util import stringfromseconds, stringtoseconds
 from artisanlib.dialogs import ArtisanDialog
+from artisanlib.widgets import MyQComboBox
 
 from PyQt5.QtCore import Qt, pyqtSlot, QRegularExpression, QSettings
 from PyQt5.QtGui import QIntValidator, QRegularExpressionValidator
@@ -35,7 +36,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QTableWidget, QPushB
 ############################################################################
 
 class PID_DlgControl(ArtisanDialog):
-    def __init__(self, parent = None, aw = None):
+    def __init__(self, parent = None, aw = None, activeTab = 0):
         super(PID_DlgControl,self).__init__(parent, aw)
         self.setModal(True)
         self.setAttribute(Qt.WA_DeleteOnClose)
@@ -350,10 +351,43 @@ class PID_DlgControl(ArtisanDialog):
         self.SVWidgets = []
         self.RampWidgets = []
         self.SoakWidgets = []
+        self.ActionWidgets = []
+        self.BeepWidgets = []
+        self.DescriptionWidgets = []
         rsGrid.addWidget(QLabel("SV"),0,1)
         rsGrid.addWidget(QLabel("Ramp"),0,2)
         rsGrid.addWidget(QLabel("Soak"),0,3)
-        for i in range(8):
+        rsGrid.addWidget(QLabel("Action"),0,4)
+        rsGrid.addWidget(QLabel("Beep"),0,5)
+        rsGrid.addWidget(QLabel("Description"),0,6)
+        actions = ["",
+            QApplication.translate("ComboBox","Pop Up",None),
+            QApplication.translate("ComboBox","Call Program",None),
+            QApplication.translate("ComboBox","Event Button",None),
+            QApplication.translate("ComboBox","Slider",None) + " " + self.aw.qmc.etypesf(0),
+            QApplication.translate("ComboBox","Slider",None) + " " + self.aw.qmc.etypesf(1),
+            QApplication.translate("ComboBox","Slider",None) + " " + self.aw.qmc.etypesf(2),
+            QApplication.translate("ComboBox","Slider",None) + " " + self.aw.qmc.etypesf(3),
+            QApplication.translate("ComboBox","START",None),
+            QApplication.translate("ComboBox","DRY",None),
+            QApplication.translate("ComboBox","FCs",None),
+            QApplication.translate("ComboBox","FCe",None),
+            QApplication.translate("ComboBox","SCs",None),
+            QApplication.translate("ComboBox","SCe",None),
+            QApplication.translate("ComboBox","DROP",None),
+            QApplication.translate("ComboBox","COOL END",None),
+            QApplication.translate("ComboBox","OFF",None),
+            QApplication.translate("ComboBox","CHARGE",None),
+            QApplication.translate("ComboBox","RampSoak ON",None),
+            QApplication.translate("ComboBox","RampSoak OFF",None),
+            QApplication.translate("ComboBox","PID ON",None),
+            QApplication.translate("ComboBox","PID OFF",None),
+            QApplication.translate("ComboBox","SV",None),
+            QApplication.translate("ComboBox","Playback ON",None),
+            QApplication.translate("ComboBox","Playback OFF",None),
+            QApplication.translate("ComboBox","Set Canvas Color",None),
+            QApplication.translate("ComboBox","Reset Canvas Color",None)]
+        for i in range(self.aw.pidcontrol.svLen):
             n = i+1
             svwidget = QSpinBox()
             svwidget.setAlignment(Qt.AlignRight)
@@ -372,16 +406,42 @@ class PID_DlgControl(ArtisanDialog):
             soakwidget.setDisplayFormat("mm:ss")
             soakwidget.setAlignment(Qt.AlignRight)
             self.SoakWidgets.append(soakwidget)
+            actionwidget = MyQComboBox()
+            actionwidget.addItems(actions)  
+            self.ActionWidgets.append(actionwidget)         
+            #beep
+            beepwidget = QWidget()
+            beepCheckBox = QCheckBox()
+            beepCheckBox.setFocusPolicy(Qt.NoFocus)
+            beepLayout = QHBoxLayout()
+            beepLayout.addStretch()
+            beepLayout.addWidget(beepCheckBox)
+            beepLayout.addSpacing(6);        
+            beepLayout.addStretch()
+            beepLayout.setContentsMargins(0,0,0,0)
+            beepLayout.setSpacing(0)
+            beepwidget.setLayout(beepLayout) 
+            self.BeepWidgets.append(beepwidget) 
+            # description
+            descriptionwidget = QLineEdit()
+            descriptionwidget.setCursorPosition(0) 
+            self.DescriptionWidgets.append(descriptionwidget)
             rsGrid.addWidget(QLabel(str(n)),n,0)
             rsGrid.addWidget(svwidget,n,1)
             rsGrid.addWidget(self.RampWidgets[i],n,2)
             rsGrid.addWidget(self.SoakWidgets[i],n,3)
-        self.setrampsoaks()
+            rsGrid.addWidget(self.ActionWidgets[i],n,4)
+            rsGrid.addWidget(self.BeepWidgets[i],n,5)
+            rsGrid.addWidget(self.DescriptionWidgets[i],n,6)
+        
+        ############################
         importButton = QPushButton(QApplication.translate("Button","Load",None))
         importButton.setMinimumWidth(80)
+        importButton.setFocusPolicy(Qt.NoFocus)
         importButton.clicked.connect(self.importrampsoaks)
         exportButton = QPushButton(QApplication.translate("Button","Save",None))
         exportButton.setMinimumWidth(80)
+        exportButton.setFocusPolicy(Qt.NoFocus)
         exportButton.clicked.connect(self.exportrampsoaks)
         buttonLayout = QHBoxLayout()
         buttonLayout.addStretch()
@@ -390,16 +450,11 @@ class PID_DlgControl(ArtisanDialog):
         buttonLayout.addStretch()
         self.loadRampSoakFromProfile = QCheckBox(QApplication.translate("CheckBox", "Load Ramp/Soak table from profile",None))
         self.loadRampSoakFromProfile.setChecked(self.aw.pidcontrol.loadRampSoakFromProfile)
-
+        
         tab2InnerLayout.addStretch()
         tab2InnerLayout.addLayout(rsGrid)
         tab2InnerLayout.addStretch()
-        tab2Layout.addLayout(buttonLayout)
-        tab2Layout.addStretch()
-        tab2Layout.addWidget(self.loadRampSoakFromProfile)
 
-
-        ############################
         okButton = QPushButton(QApplication.translate("Button","OK",None))
         okButton.clicked.connect(self.okAction)
         onButton = QPushButton(QApplication.translate("Button","On",None))
@@ -414,28 +469,146 @@ class PID_DlgControl(ArtisanDialog):
         okButtonLayout.setContentsMargins(0,0,0,0)
         tab1Layout.setContentsMargins(0,0,0,0) # left, top, right, bottom
         tab1Layout.setSpacing(5)
-        tab2Layout.setContentsMargins(0,0,0,0)
+        tab2Layout.setContentsMargins(10,10,10,10)
         tab2Layout.setSpacing(5)
-        tabWidget = QTabWidget()
+        self.tabWidget = QTabWidget()
         C1Widget = QWidget()
         C1Widget.setLayout(tab1Layout)
-        tabWidget.addTab(C1Widget,QApplication.translate("Tab","PID",None))
+        self.tabWidget.addTab(C1Widget,QApplication.translate("Tab","PID",None))
         C2Widget = QWidget()
         C2Widget.setLayout(tab2Layout)
-        tabWidget.addTab(C2Widget,QApplication.translate("Tab","Ramp/Soak",None))
-        tabWidget.setContentsMargins(0,0,0,0)
+        self.tabWidget.addTab(C2Widget,QApplication.translate("Tab","Ramp/Soak",None))
+        self.tabWidget.setContentsMargins(0,0,0,0)
+        ############################
+        
+        # RSn tabs
+        self.RSnTab_SVWidgets = []
+        self.RSnTab_RampWidgets = []
+        self.RSnTab_SoakWidgets = []
+        self.RSnTab_ActionWidgets = []
+        self.RSnTab_BeepWidgets = []
+        self.RSnTab_DescriptionWidgets = []
+        
+        self.RSnButtons = []
+        
+        RSbuttonLayout = QHBoxLayout()
+        RSbuttonLayout.addStretch()
+        
+        for j in range(self.aw.pidcontrol.RSLen):
+            # create tab per RSn set
+            RSnGrid = QGridLayout()
+            RSnGrid.addWidget(QLabel("SV"),0,1)
+            RSnGrid.addWidget(QLabel("Ramp"),0,2)
+            RSnGrid.addWidget(QLabel("Soak"),0,3)
+            RSnGrid.addWidget(QLabel("Action"),0,4)
+            RSnGrid.addWidget(QLabel("Beep"),0,5)
+            RSnGrid.addWidget(QLabel("Description"),0,6)
+            SVWidgets = []
+            RampWidgets = []
+            SoakWidgets = []
+            ActionWidgets = []
+            BeepWidgets = []
+            DescriptionWidgets = []
+            for i in range(self.aw.pidcontrol.svLen):
+                n = i+1
+                svwidget = QSpinBox()
+                svwidget.setAlignment(Qt.AlignRight)
+                svwidget.setRange(0,999)
+                svwidget.setSingleStep(10)
+                if self.aw.qmc.mode == "F":
+                    svwidget.setSuffix(" F")
+                elif self.aw.qmc.mode == "C":
+                    svwidget.setSuffix(" C")
+                SVWidgets.append(svwidget)
+                rampwidget = QTimeEdit()
+                rampwidget.setDisplayFormat("mm:ss")
+                rampwidget.setAlignment(Qt.AlignRight)
+                RampWidgets.append(rampwidget)
+                soakwidget = QTimeEdit()
+                soakwidget.setDisplayFormat("mm:ss")
+                soakwidget.setAlignment(Qt.AlignRight)
+                SoakWidgets.append(soakwidget)
+                actionwidget = MyQComboBox()
+                actionwidget.addItems(actions)  
+                ActionWidgets.append(actionwidget)         
+                #beep
+                beepwidget = QWidget()
+                beepCheckBox = QCheckBox()
+                beepCheckBox.setFocusPolicy(Qt.NoFocus)
+                beepLayout = QHBoxLayout()
+                beepLayout.addStretch()
+                beepLayout.addWidget(beepCheckBox)
+                beepLayout.addSpacing(6);        
+                beepLayout.addStretch()
+                beepLayout.setContentsMargins(0,0,0,0)
+                beepLayout.setSpacing(0)
+                beepwidget.setLayout(beepLayout) 
+                BeepWidgets.append(beepwidget) 
+                # description
+                descwidget = QLineEdit()
+                descwidget.setCursorPosition(0) 
+                DescriptionWidgets.append(descwidget)
+                #
+                RSnGrid.addWidget(QLabel(str(n)),n,0)
+                RSnGrid.addWidget(svwidget,n,1)
+                RSnGrid.addWidget(RampWidgets[i],n,2)
+                RSnGrid.addWidget(SoakWidgets[i],n,3)
+                RSnGrid.addWidget(ActionWidgets[i],n,4)
+                RSnGrid.addWidget(BeepWidgets[i],n,5)
+                RSnGrid.addWidget(DescriptionWidgets[i],n,6)
+            self.RSnTab_SVWidgets.append(SVWidgets)
+            self.RSnTab_RampWidgets.append(RampWidgets)
+            self.RSnTab_SoakWidgets.append(SoakWidgets)
+            self.RSnTab_ActionWidgets.append(ActionWidgets)
+            self.RSnTab_BeepWidgets.append(BeepWidgets)
+            self.RSnTab_DescriptionWidgets.append(DescriptionWidgets)
+            # create tab
+            RSnTabLayout = QVBoxLayout()
+            RSnTabInnerLayout = QHBoxLayout()
+            RSnTabInnerLayout.addStretch()
+            RSnTabInnerLayout.addLayout(RSnGrid)
+            RSnTabInnerLayout.addStretch()
+            RSnTabLayout.addLayout(RSnTabInnerLayout)
+            RSnTabLayout.addStretch()
+            RSnTabLayout.setContentsMargins(10,10,10,10)
+            RSnTabLayout.setSpacing(5)
+        
+            RSnTabWidget = QWidget()
+            RSnTabWidget.setLayout(RSnTabLayout)
+            self.tabWidget.addTab(RSnTabWidget,QApplication.translate("Tab","RS",None)+str(j+1))
+            
+            setRSnButton = QPushButton(QApplication.translate("Button","RS",None)+str(j+1))
+            setRSnButton.setFocusPolicy(Qt.NoFocus)
+            setRSnButton.clicked.connect(self.setRS)
+            self.RSnButtons.append(setRSnButton)
+            RSbuttonLayout.addWidget(setRSnButton)
+        RSbuttonLayout.addStretch()
+        
+        if self.aw.pidcontrol.RSLen > 0:
+            tab2Layout.addLayout(RSbuttonLayout)
+        tab2Layout.addLayout(buttonLayout)
+        tab2Layout.addStretch()
+        tab2Layout.addWidget(self.loadRampSoakFromProfile)
+        
+        
+        self.tabWidget.setCurrentIndex(activeTab)
+        ############################
         mainLayout = QVBoxLayout()
-        mainLayout.addWidget(tabWidget)
+        mainLayout.addWidget(self.tabWidget)
         mainLayout.addLayout(okButtonLayout)
         mainLayout.setContentsMargins(2,10,2,2)
         self.setLayout(mainLayout)
         okButton.setFocus()
+        
+        self.setrampsoaks()
+        self.setRSs()
 
         settings = QSettings()
         if settings.contains("PIDPosition"):
             self.move(settings.value("PIDPosition"))
         
         mainLayout.setSizeConstraint(QLayout.SetFixedSize)
+        
     
     @pyqtSlot(int)
     def activateSVSlider(self,i):
@@ -468,7 +641,57 @@ class PID_DlgControl(ArtisanDialog):
     @pyqtSlot(bool)
     def importrampsoaks(self,_):
         self.aw.fileImport(QApplication.translate("Message", "Load Ramp/Soak Table",None),self.importrampsoaksJSON)
-        
+    
+    @pyqtSlot(bool)
+    def setRS(self,_):
+        try:
+            n = self.RSnButtons.index(self.sender())
+            self.aw.pidcontrol.svValues = self.getRSnSVvalues(n)
+            self.aw.pidcontrol.svRamps = self.getRSnSVramps(n)
+            self.aw.pidcontrol.svSoaks = self.getRSnSVsoaks(n)
+            self.aw.pidcontrol.svActions = self.getRSnSVactions(n)
+            self.aw.pidcontrol.svBeeps = self.getRSnSVbeeps(n)
+            self.aw.pidcontrol.svDescriptions = self.getRSnSVdescriptions(n)
+            self.setrampsoaks()
+        except:
+            pass
+
+    def getRSnSVvalues(self,n):
+        return [w.value() for w in self.RSnTab_SVWidgets[n]]
+    def getRSnSVramps(self,n):
+        return [self.aw.QTime2time(w.time()) for w in self.RSnTab_RampWidgets[n]]
+    def getRSnSVsoaks(self,n):
+        return [self.aw.QTime2time(w.time()) for w in self.RSnTab_SoakWidgets[n]]
+    def getRSnSVactions(self,n):
+        return [int(w.currentIndex()) - 1 for w in self.RSnTab_ActionWidgets[n]]
+    def getRSnSVbeeps(self,n):
+        return [bool(w.layout().itemAt(1).widget().isChecked()) for w in self.RSnTab_BeepWidgets[n]]
+    def getRSnSVdescriptions(self,n):
+        return [w.text() for w in self.RSnTab_DescriptionWidgets[n]]
+
+    def setRSnSVvalues(self,n):
+        for i in range(self.aw.pidcontrol.svLen):
+            self.RSnTab_SVWidgets[n][i].setValue(self.aw.pidcontrol.RS_svValues[n][i])
+    def setRSnSVramps(self,n):
+        for i in range(self.aw.pidcontrol.svLen):
+            self.RSnTab_RampWidgets[n][i].setTime(self.aw.time2QTime(self.aw.pidcontrol.RS_svRamps[n][i]))
+    def setRSnSVsoaks(self,n):
+        for i in range(self.aw.pidcontrol.svLen):
+            self.RSnTab_SoakWidgets[n][i].setTime(self.aw.time2QTime(self.aw.pidcontrol.RS_svSoaks[n][i]))
+    def setRSnSVactions(self,n):
+        for i in range(self.aw.pidcontrol.svLen):
+            self.RSnTab_ActionWidgets[n][i].setCurrentIndex(self.aw.pidcontrol.RS_svActions[n][i] + 1)
+    def setRSnSVbeeps(self,n):
+        for i in range(self.aw.pidcontrol.svLen):
+            beep = self.RSnTab_BeepWidgets[n][i].layout().itemAt(1).widget()
+            if self.aw.pidcontrol.RS_svBeeps[n][i]:
+                beep.setCheckState(Qt.Checked)
+            else:
+                beep.setCheckState(Qt.Unchecked)
+    def setRSnSVdescriptions(self,n):
+        for i in range(self.aw.pidcontrol.svLen):
+            self.RSnTab_DescriptionWidgets[n][i].setText(self.aw.pidcontrol.RS_svDescriptions[n][i])
+                
     def importrampsoaksJSON(self,filename):
         try:
             import io
@@ -479,6 +702,9 @@ class PID_DlgControl(ArtisanDialog):
             self.aw.pidcontrol.svValues = rampsoaks["svValues"]
             self.aw.pidcontrol.svRamps = rampsoaks["svRamps"]
             self.aw.pidcontrol.svSoaks = rampsoaks["svSoaks"]
+            self.aw.pidcontrol.svActions = rampsoaks["svActions"]
+            self.aw.pidcontrol.svBeeps = rampsoaks["svBeeps"]
+            self.aw.pidcontrol.svDescriptions = rampsoaks["svDescriptions"]
             self.setrampsoaks()
         except Exception as ex:
 #            import traceback
@@ -497,6 +723,9 @@ class PID_DlgControl(ArtisanDialog):
             rampsoaks["svValues"] = self.aw.pidcontrol.svValues
             rampsoaks["svRamps"] = self.aw.pidcontrol.svRamps
             rampsoaks["svSoaks"] = self.aw.pidcontrol.svSoaks
+            rampsoaks["svActions"] = self.aw.pidcontrol.svActions
+            rampsoaks["svBeeps"] = self.aw.pidcontrol.svBeeps
+            rampsoaks["svDescriptions"] = self.aw.pidcontrol.svDescriptions
             rampsoaks["mode"] = self.aw.qmc.mode
             outfile = open(filename, 'w')
             from json import dump as json_dump
@@ -510,16 +739,51 @@ class PID_DlgControl(ArtisanDialog):
             return False
             
     def saverampsoaks(self):
-        for i in range(8):
+        for i in range(self.aw.pidcontrol.svLen):
             self.aw.pidcontrol.svValues[i] = self.SVWidgets[i].value()
-            self.aw.pidcontrol.svRamps[i] = self.aw.pidcontrol.QTime2time(self.RampWidgets[i].time())
-            self.aw.pidcontrol.svSoaks[i] = self.aw.pidcontrol.QTime2time(self.SoakWidgets[i].time())
+            self.aw.pidcontrol.svRamps[i] = self.aw.QTime2time(self.RampWidgets[i].time())
+            self.aw.pidcontrol.svSoaks[i] = self.aw.QTime2time(self.SoakWidgets[i].time())            
+            self.aw.pidcontrol.svActions[i] = int(self.ActionWidgets[i].currentIndex()) - 1 
+            beep = self.BeepWidgets[i].layout().itemAt(1).widget()           
+            self.aw.pidcontrol.svBeeps[i] = bool(beep.isChecked())
+            self.aw.pidcontrol.svDescriptions[i] = self.DescriptionWidgets[i].text()
             
     def setrampsoaks(self):
-        for i in range(8):
+        for i in range(self.aw.pidcontrol.svLen):
             self.SVWidgets[i].setValue(self.aw.pidcontrol.svValues[i])
-            self.RampWidgets[i].setTime(self.aw.pidcontrol.time2QTime(self.aw.pidcontrol.svRamps[i]))
-            self.SoakWidgets[i].setTime(self.aw.pidcontrol.time2QTime(self.aw.pidcontrol.svSoaks[i]))
+            self.RampWidgets[i].setTime(self.aw.time2QTime(self.aw.pidcontrol.svRamps[i]))
+            self.SoakWidgets[i].setTime(self.aw.time2QTime(self.aw.pidcontrol.svSoaks[i]))
+            self.ActionWidgets[i].setCurrentIndex(self.aw.pidcontrol.svActions[i] + 1)
+            beep = self.BeepWidgets[i].layout().itemAt(1).widget() 
+            if self.aw.pidcontrol.svBeeps[i]:
+                beep.setCheckState(Qt.Checked)
+            else:
+                beep.setCheckState(Qt.Unchecked)
+            self.DescriptionWidgets[i].setText(self.aw.pidcontrol.svDescriptions[i])
+
+    def saveRSs(self):
+        self.aw.pidcontrol.RS_svValues = []
+        self.aw.pidcontrol.RS_svRamps = []
+        self.aw.pidcontrol.RS_svSoaks = []
+        self.aw.pidcontrol.RS_svActions = []
+        self.aw.pidcontrol.RS_svBeeps = []
+        self.aw.pidcontrol.RS_svDescriptions = []
+        for n in range(self.aw.pidcontrol.RSLen):
+            self.aw.pidcontrol.RS_svValues.append(self.getRSnSVvalues(n))
+            self.aw.pidcontrol.RS_svRamps.append(self.getRSnSVramps(n))
+            self.aw.pidcontrol.RS_svSoaks.append(self.getRSnSVsoaks(n))
+            self.aw.pidcontrol.RS_svActions.append(self.getRSnSVactions(n))
+            self.aw.pidcontrol.RS_svBeeps.append(self.getRSnSVbeeps(n))
+            self.aw.pidcontrol.RS_svDescriptions.append(self.getRSnSVdescriptions(n))
+
+    def setRSs(self):
+        for n in range(self.aw.pidcontrol.RSLen):
+            self.setRSnSVvalues(n)
+            self.setRSnSVramps(n)
+            self.setRSnSVsoaks(n)
+            self.setRSnSVactions(n)
+            self.setRSnSVbeeps(n)
+            self.setRSnSVdescriptions(n)
 
     @pyqtSlot(bool)
     def pidConf(self,_):
@@ -569,7 +833,10 @@ class PID_DlgControl(ArtisanDialog):
         self.aw.pidcontrol.svLookahead = self.pidSVLookahead.value()
         self.aw.pidcontrol.dutySteps = self.pidDutySteps.value()
         #
+        self.aw.PID_DlgControl_activeTab = self.tabWidget.currentIndex()
+        #
         self.saverampsoaks()
+        self.saveRSs()
         #
         self.closeEvent(None)
 

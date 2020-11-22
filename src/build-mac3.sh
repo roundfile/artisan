@@ -6,7 +6,7 @@ set -e
 # add argument "legacy" to make a build that supports older OS X systems using an outdated Qt
 
 if [ ! -z $APPVEYOR ]; then
-    # Travis CI builds
+    # Appveyor CI builds
     echo "NOTICE: Appveyor build"
     export PYTHON=/usr/local
     export PYTHONBIN=$PYTHON/bin
@@ -17,19 +17,6 @@ if [ ! -z $APPVEYOR ]; then
     export QT_SRC_PATH=${QT_PATH}
     export MACOSX_DEPLOYMENT_TARGET=10.15
     export ARTISAN_LEGACY_BUILD=false
-elif [[ "$1" = "legacy" ]]; then
-    echo "NOTICE: legacy build"
-    # local legacy build featuring an outdated Qt to minimize the DEPLOYMENT_TARGET supporting older system
-    export PYTHON=/Library/Frameworks/Python.framework/Versions/3.6
-    export PYTHONBIN=$PYTHON/bin
-    export PYTHONPATH=$PYTHON/lib/python3.6
-    export PYTHON_V=3.6
-    export QT_PATH=${PYTHONPATH}/site-packages/PyQt5/Qt
-#    export QT_SRC_PATH=~/Qt5.9.3/5.9.3/clang_64
-    export QT_SRC_PATH=${QT_PATH}
-    export MACOSX_DEPLOYMENT_TARGET=10.10
-    export DYLD_LIBRARY_PATH=$PYTHON/lib:$DYLD_LIBRARY_PATH
-    export ARTISAN_LEGACY_BUILD=true
 else
     # standard local builds
     echo "NOTICE: Standard build"
@@ -47,6 +34,7 @@ else
 
     export QT_PATH=${PYTHONPATH}/site-packages/PyQt5/Qt
     export QT_SRC_PATH=~/Qt5.14.2/5.14.2/clang_64
+    #export QT_SRC_PATH=~/Qt5.15.2/5.15.2/clang_64
     export MACOSX_DEPLOYMENT_TARGET=10.13
     export DYLD_LIBRARY_PATH=$PYTHON/lib:$DYLD_LIBRARY_PATH
     export ARTISAN_LEGACY_BUILD=false

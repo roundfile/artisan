@@ -30,9 +30,9 @@
 import time as libtime
 import numpy
 
-from artisanlib.util import decs2string, fromCtoF, fromFtoC, hex2int, str2cmd
+from artisanlib.util import decs2string, fromCtoF, fromFtoC, hex2int, str2cmd, stringfromseconds
 
-from PyQt5.QtCore import pyqtSlot, QTime
+from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QApplication
 
 class FujiPID(object):
@@ -317,6 +317,51 @@ class FujiPID(object):
                 self.aw.sendmessage(message)
                 self.aw.qmc.adderror(message)
 
+    #writes new values for p - i - d
+    def setpidPXF(self,k,newPvalue,newIvalue,newDvalue):
+        if k is not None and k > 0:
+            #send command to the right sv
+            pkey = "p" + str(k)
+            ikey = "i" + str(k)
+            dkey = "d" + str(k)
+            if self.aw.ser.useModbusPort:
+                reg = self.aw.modbus.address2register(self.aw.fujipid.PXF[pkey][1],6)
+                self.aw.modbus.writeSingleRegister(self.aw.ser.controlETpid[1],reg,int(float(newPvalue)*10.))
+                libtime.sleep(0.035)
+                reg = self.aw.modbus.address2register(self.aw.fujipid.PXF[ikey][1],6)
+                self.aw.modbus.writeSingleRegister(self.aw.ser.controlETpid[1],reg,int(float(newIvalue)*10.))
+                libtime.sleep(0.035)
+                reg = self.aw.modbus.address2register(self.aw.fujipid.PXF[dkey][1],6)
+                self.aw.modbus.writeSingleRegister(self.aw.ser.controlETpid[1],reg,int(float(newDvalue)*10.))
+                libtime.sleep(0.035)
+                p = i = d = "        "
+            else:
+                commandp = self.aw.fujipid.message2send(self.aw.ser.controlETpid[1],6,self.aw.fujipid.PXF[pkey][1],int(float(newPvalue)*10.))
+                commandi = self.aw.fujipid.message2send(self.aw.ser.controlETpid[1],6,self.aw.fujipid.PXF[ikey][1],int(float(newIvalue)*10.))
+                commandd = self.aw.fujipid.message2send(self.aw.ser.controlETpid[1],6,self.aw.fujipid.PXF[dkey][1],int(float(newDvalue)*10.))
+                p = self.aw.ser.sendFUJIcommand(commandp,8)
+                libtime.sleep(0.035) 
+                i = self.aw.ser.sendFUJIcommand(commandi,8)
+                libtime.sleep(0.035) 
+                d = self.aw.ser.sendFUJIcommand(commandd,8)
+                libtime.sleep(0.035) 
+            #verify it went ok
+            if len(p) == 8 and len(i)==8 and len(d) == 8:
+                self.aw.fujipid.PXF[pkey][0] = float(newPvalue)
+                self.aw.fujipid.PXF[ikey][0] = float(newIvalue)
+                self.aw.fujipid.PXF[dkey][0] = float(newDvalue)
+                message = QApplication.translate("StatusBar","pid #{0} successfully set to ({1},{2},{3})",None
+                                                       ).format(str(k),str(newPvalue),str(newIvalue),str(newDvalue))
+                self.aw.sendmessage(message)
+            else:
+                lp = len(p)
+                li = len(i)
+                ld = len(d)
+                message = QApplication.translate("StatusBar","pid command failed. Bad data at pid{0} (8,8,8): ({1},{2},{3}) ",None
+                                                       ).format(str(k),str(lp),str(li),str(ld))
+                self.aw.sendmessage(message)
+                self.aw.qmc.adderror(message)
+
     # updates and returns the current ramp soak mode
     def getCurrentRampSoakMode(self):
         if self.aw.ser.controlETpid[0] == 0: # PXG
@@ -334,9 +379,9 @@ class FujiPID(object):
         if self.aw.ser.controlETpid[0] == 0: # PXG
             self.aw.fujipid.PXG4["rampsoakmode"][0] = currentmode
         elif self.aw.ser.controlETpid[0] == 1: # PXR
-            self.aw.fujipid.PXG4["rampsoakmode"][0] = currentmode
+            self.aw.fujipid.PXR["rampsoakmode"][0] = currentmode
         elif self.aw.ser.controlETpid[0] == 4: # PXF
-            self.aw.fujipid.PXG4["rampsoakmode"][0] = currentmode
+            self.aw.fujipid.PXF["rampsoakmode"][0] = currentmode
         return currentmode                
                                     
     def getCurrentPIDnumberPXG(self):
@@ -348,7 +393,17 @@ class FujiPID(object):
             N = self.aw.fujipid.readoneword(command)
         libtime.sleep(0.035) 
         return N
-                        
+
+    def getCurrentPIDnumberPXF(self):
+        if self.aw.ser.useModbusPort:
+            reg = self.aw.modbus.address2register(self.aw.fujipid.PXF["selectedpid"][1],3)
+            N = self.aw.modbus.readSingleRegister(self.aw.ser.controlETpid[1],reg,3)
+        else:
+            command = self.aw.fujipid.message2send(self.aw.ser.controlETpid[1],3,self.aw.fujipid.PXF["selectedpid"][1],1)
+            N = self.aw.fujipid.readoneword(command)
+        libtime.sleep(0.035) 
+        return N
+                
     def setpidPXR(self,var,v):
         r = ""
         if var == "p":
@@ -1012,9 +1067,24 @@ class PIDcontrol(object):
         #
         self.pidOnCHARGE = False
         self.loadRampSoakFromProfile = False
-        self.svValues = [0,0,0,0,0,0,0,0] # sv temp as int per 8 channels
-        self.svRamps = [0,0,0,0,0,0,0,0] # seconds as int per 8 channels
-        self.svSoaks = [0,0,0,0,0,0,0,0] # seconds as int per 8 channels
+        self.svLen = 8 # should stay at 8 for compatibility reasons!
+        self.svValues = [0]*self.svLen # sv temp as int per 8 channels
+        self.svRamps = [0]*self.svLen  # seconds as int per 8 channels
+        self.svSoaks = [0]*self.svLen  # seconds as int per 8 channels
+        self.svActions = [-1]*self.svLen      # alarm action as int per 8 channels
+        self.svBeeps = [False]*self.svLen     # alarm beep as bool per 8 channels
+        self.svDescriptions = [""]*self.svLen # alarm descriptions as string per 8 channels
+        #
+        self.svTriggeredAlarms = [False]*self.svLen # set to true once the corresponding alarm was triggered
+        # extra RS sets:
+        self.RSLen = 3 # can be changed to have less or more RSn sets
+        self.RS_svValues = [[0]*self.svLen]*self.RSLen  # sv temp as int per 8 channels
+        self.RS_svRamps = [[0]*self.svLen]*self.RSLen  # seconds as int per 8 channels
+        self.RS_svSoaks = [[0]*self.svLen]*self.RSLen  # seconds as int per 8 channels
+        self.RS_svActions = [[-1]*self.svLen]*self.RSLen      # alarm action as int per 8 channels
+        self.RS_svBeeps = [[False]*self.svLen]*self.RSLen     # alarm beep as bool per 8 channels
+        self.RS_svDescriptions = [[""]*self.svLen]*self.RSLen # alarm descriptions as string per 8 channels
+        #
         self.svSlider = False
         self.svButtons = False
         self.svMode = 0 # 0: manual, 1: Ramp/Soak, 2: Follow (background profile)
@@ -1046,7 +1116,16 @@ class PIDcontrol(object):
         self.sv_smoothing_factor = 0 # off if 0
         self.sv_decay_weights = None
         self.previous_svs = []
+        # time @ PID ON
+        self.time_pidON = 0 # in monitoring mode, ramp-soak times are interperted w.r.t. the time after the PID was turned on and not the time after CHARGE as during recording
+        self.current_ramp_segment = 0 # the RS segment currently active. Note that this is 1 based, 0 indicates that no segment has started yet
+        self.current_soak_segment = 0 # the RS segment currently active. Note that this is 1 based, 0 indicates that no segment has started yet
+        self.ramp_soak_engaged = 1 # set to 0, disengaged, after the RS pattern was processed fully
+        self.RS_total_time = 0 # holds the total time of the current Ramp/Soak pattern
 
+    def RStotalTime(self,ramps,soaks):
+        return sum(ramps) + sum(soaks)
+        
     # returns True if an external PID controller is in use (MODBUS or TC4 PID firmware)
     # and False if the internal software PID is in charge
     # the returned value indicates the type of external PID control:
@@ -1129,13 +1208,6 @@ class PIDcontrol(object):
                 self.svValues[i] = fromCtoF(self.svValues[i])
         except Exception:
             pass
-    
-    # takes an "Arduino" float time in seconds and returns the corresponding QTime() object
-    def time2QTime(self,t):
-        return QTime(0,t/60,t%60)
-        
-    def QTime2time(self,t):
-        return t.minute() * 60 + t.second()
         
     def togglePID(self):
         if self.pidActive:
@@ -1145,6 +1217,16 @@ class PIDcontrol(object):
 
     def pidOn(self):
         if self.aw.qmc.flagon:
+            self.current_ramp_segment = 0
+            self.current_soak_segment = 0
+            self.ramp_soak_engaged = 1
+            self.RS_total_time = self.RStotalTime(self.svRamps,self.svSoaks)
+            self.svTriggeredAlarms = [False]*self.svLen
+            
+            if self.aw.qmc.flagstart or len(self.aw.qmc.on_timex)<1:
+                self.time_pidON = 0
+            else:
+                self.time_pidON = self.aw.qmc.on_timex[-1]
             self.aw.qmc.temporayslider_force_move = True
             self.lastEnergy = None
             # TC4 hardware PID
@@ -1191,6 +1273,9 @@ class PIDcontrol(object):
                 self.aw.button_10.setStyleSheet(self.aw.pushbuttonstyles["PIDactive"])
 
     def pidOff(self):
+        if self.aw.qmc.flagon and not self.aw.qmc.flagstart:
+            self.aw.sendmessage(QApplication.translate("Message","PID OFF", None))
+            self.aw.qmc.setLCDtime(0)       
         # MODBUS hardware PID
         if (self.aw.pidcontrol.externalPIDControl() == 1 and self.aw.modbus.PID_OFF_action and self.aw.modbus.PID_OFF_action != ""):
             self.aw.eventaction(4,self.aw.modbus.PID_OFF_action)
@@ -1241,29 +1326,50 @@ class PIDcontrol(object):
     # returns SV (or None) wrt. to the ramp-soak table and the given time t
     # (used only internally)
     def svRampSoak(self,t):
-        segment_end_time = 0 # the (end) time of the segments
-        prev_segment_end_time = 0 # the (end) time of the previous segment
-        segment_start_sv = 0 # the (target) sv of the segment
-        prev_segment_start_sv = 0 # the (target) sv of the previous segment
-        for i in range(len(self.svValues)):
-            # Ramp
-            segment_end_time = segment_end_time + self.svRamps[i]
-            segment_start_sv = self.svValues[i]
-            if segment_end_time > t:
-                # t is within the current segment
-                k = float(segment_start_sv - prev_segment_start_sv) / float(segment_end_time - prev_segment_end_time)
-                return prev_segment_start_sv + k*(t - prev_segment_end_time)
-            prev_segment_end_time = segment_end_time
-            prev_segment_start_sv = segment_start_sv
-            # Soak
-            segment_end_time = segment_end_time + self.svSoaks[i]
-            segment_start_sv = self.svValues[i]
-            if segment_end_time > t:
-                # t is within the current segment
-                return prev_segment_start_sv
-            prev_segment_end_time = segment_end_time
-            prev_segment_start_sv = segment_start_sv
-        return None
+        if self.ramp_soak_engaged == 0:
+            return None
+        else:
+            self.aw.qmc.setLCDtime(self.RS_total_time-t)
+            segment_end_time = 0 # the (end) time of the segments
+            prev_segment_end_time = 0 # the (end) time of the previous segment
+            segment_start_sv = 0 # the (target) sv of the segment
+            prev_segment_start_sv = 0 # the (target) sv of the previous segment
+            for i in range(len(self.svValues)):
+                # Ramp
+                if self.svRamps[i] != 0:
+                    segment_end_time = segment_end_time + self.svRamps[i]
+                    segment_start_sv = self.svValues[i]
+                    if segment_end_time > t:
+                        # t is within the current segment
+                        k = float(segment_start_sv - prev_segment_start_sv) / float(segment_end_time - prev_segment_end_time)                        
+                        if self.current_ramp_segment != i+1:
+                            self.aw.sendmessage(QApplication.translate("Message","Ramp {0}: in {1} to SV {2}".format(i+1,stringfromseconds(self.svRamps[i]),self.svValues[i]), None))
+                            self.current_ramp_segment = i+1
+                        return prev_segment_start_sv + k*(t - prev_segment_end_time)
+                prev_segment_end_time = segment_end_time
+                prev_segment_start_sv = segment_start_sv
+                # Soak
+                if self.svSoaks[i] != 0:
+                    segment_end_time = segment_end_time + self.svSoaks[i]
+                    segment_start_sv = self.svValues[i]
+                    if segment_end_time > t:
+                        # t is within the current segment
+                        if self.current_soak_segment != i+1:
+                            self.current_soak_segment = i+1
+                            self.aw.sendmessage(QApplication.translate("Message","Soak {0}: for {1} at SV {2}".format(i+1,stringfromseconds(self.svSoaks[i]),self.svValues[i]), None))
+                        return prev_segment_start_sv
+                prev_segment_end_time = segment_end_time
+                prev_segment_start_sv = segment_start_sv
+                if (self.current_ramp_segment > i or self.current_soak_segment > 1) and not self.svTriggeredAlarms[i]:
+                    self.svTriggeredAlarms[i] = True
+                    if self.svActions[i] > -1:
+                        self.aw.qmc.processAlarmSignal.emit(0,self.svBeeps[i],self.svActions[i],self.svDescriptions[i])
+                        #self.aw.qmc.processAlarm(0,self.svBeeps[i],self.svActions[i],self.svDescriptions[i])
+            self.aw.sendmessage(QApplication.translate("Message","Ramp/Soak pattern finished", None))
+            self.aw.qmc.setLCDtime(0)       
+            self.ramp_soak_engaged = 0 # stop the ramp/soak process
+            # fire RS-finished action
+            return None
     
     def smooth_sv(self,sv):
         if self.sv_smoothing_factor:
@@ -1287,8 +1393,8 @@ class PIDcontrol(object):
     def calcSV(self,tx):
         if self.svMode == 1:
             # Ramp/Soak mode
-            # actual time (after CHARGE):
-            return self.svRampSoak(tx)
+            # actual time (after CHARGE) on recording and time after PID ON on monitoring:
+            return self.svRampSoak(tx - self.time_pidON)
         elif self.svMode == 2 and self.aw.qmc.background:
             # Follow Background mode
             followBT = True # if false, follow ET
@@ -1389,6 +1495,19 @@ class PIDcontrol(object):
             self.aw.qmc.pid.setTarget(sv,init=init)
             self.sv = sv # remember last sv
 
+    # set RS patterns from one of the RS sets
+    def setRSpattern(self,n):
+        try:
+            if n < self.RSLen:
+                self.svValues = self.RS_svValues[n]
+                self.svRamps = self.RS_svRamps[n]
+                self.svSoaks = self.RS_svSoaks[n]
+                self.svActions = self.RS_svActions[n]
+                self.svBeeps = self.RS_svBeeps[n]
+                self.svDescriptions = self.RS_svDescriptions[n]
+        except:
+            pass
+    
     def adjustsv(self,diff):
         self.setSV(self.sv + diff,True)
     

@@ -110,7 +110,7 @@ class modbusport(object):
         self.bytesize = 8
         self.parity= 'N'
         self.stopbits = 1
-        self.timeout = 1.0
+        self.timeout = 0.4
         self.PID_slave_ID = 0
         self.PID_SV_register = 0
         self.PID_p_register = 0
@@ -134,7 +134,8 @@ class modbusport(object):
         # MODBUS functions associated to dicts associating MODBUS slave ids to registers in use 
         # for optimized read of full register segments with single requests
         # this dict is re-computed on each connect() by a call to updateActiveRegisters()
-        # NOTE: for registers of type float and BCD (32bit = 2x16bit) also the succeeding register is registered here
+        # NOTE: for registers of type float and BCD (32bit = 2x16bit) also the succeeding registers are registered
+        self.fetch_max_blocks = False # if set, the optimizer fetches only one sequence per area from the minimum to the maximum register ignoring gaps
         self.activeRegisters = {}        
         # the readings cache that is filled by requesting sequences of values in blocks
         self.readingsCache = {}
@@ -325,10 +326,13 @@ class modbusport(object):
             for code in self.activeRegisters:
                 for slave in self.activeRegisters[code]:
                     registers = sorted(self.activeRegisters[code][slave])
-                    # split in successive sequences
-                    gaps = [[s, e] for s, e in zip(registers, registers[1:]) if s+1 < e]
-                    edges = iter(registers[:1] + sum(gaps, []) + registers[-1:])
-                    sequences = list(zip(edges, edges)) # list of pairs of the form (start-register,end-register)
+                    if self.fetch_max_blocks:
+                        sequences = [[registers[0],registers[-1]]]
+                    else:
+                        # split in successive sequences
+                        gaps = [[s, e] for s, e in zip(registers, registers[1:]) if s+1 < e]
+                        edges = iter(registers[:1] + sum(gaps, []) + registers[-1:])
+                        sequences = list(zip(edges, edges)) # list of pairs of the form (start-register,end-register)
                     just_send = False
                     for seq in sequences:
                         retry = self.readRetries
