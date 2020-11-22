@@ -5758,7 +5758,8 @@ class tgraphcanvas(FigureCanvas):
                         else:
                             # in this case we use the standard algo
                             try:
-                                # variant using incremental polyfit RoR computation
+                                aw.qmc.adderror("Running #1")  #dave
+                               # variant using incremental polyfit RoR computation
                                 z1 = [self.polyRoR(tx_roast,nt1,dsET,i) for i in range(len(nt1))]
                             except:
                                 # a numpy/OpenBLAS polyfit bug can cause polyfit to throw an execption "SVD did not converge in Linear Least Squares" on Windows Windows 10 update 2004
@@ -5770,7 +5771,8 @@ class tgraphcanvas(FigureCanvas):
                     else:
                         if self.polyfitRoRcalc:
                             try:
-                                # variant using incremental polyfit RoR computation
+                                aw.qmc.adderror("Running #2")  #dave
+                               # variant using incremental polyfit RoR computation
                                 z1 = [self.polyRoR(tx_roast,nt1,dsET,i) for i in range(len(nt1))]
                             except:
                                 # a numpy/OpenBLAS polyfit bug can cause polyfit to throw an execption "SVD did not converge in Linear Least Squares" on Windows Windows 10 update 2004
@@ -5829,6 +5831,7 @@ class tgraphcanvas(FigureCanvas):
                         else:
                             # in this case we use the standard algo
                             try:
+                                aw.qmc.adderror("Running #3")  #dave
                                 z2 = [self.polyRoR(tx_roast,nt2,dsBT,i) for i in range(len(nt2))]
                             except:
                                 # a numpy/OpenBLAS polyfit bug can cause polyfit to throw an execption "SVD did not converge in Linear Least Squares" on Windows Windows 10 update 2004
@@ -5840,6 +5843,7 @@ class tgraphcanvas(FigureCanvas):
                     else:
                         if self.polyfitRoRcalc:
                             try:
+                                aw.qmc.adderror("Running #4")  #dave
                                 # variant using incremental polyfit RoR computation
                                 z2 = [self.polyRoR(tx_roast,nt2,dsBT,i) for i in range(len(nt2))]
                             except:
@@ -13753,6 +13757,7 @@ class SampleThread(QThread):
                             #        grab the full set of points and do a formal LS solution to a straight line and use the slope estimate for RoR
                             if aw.qmc.polyfitRoRcalc:
                                 try:
+                                    aw.qmc.adderror("Running #5")  #dave
                                     time_vec = sample_ctimex1[-left_index:]
                                     temp_samples = sample_tstemp1[-left_index:]
                                     with warnings.catch_warnings():
@@ -13790,6 +13795,7 @@ class SampleThread(QThread):
                             #        grab the full set of points and do a formal LS solution to a straight line and use the slope estimate for RoR
                             if aw.qmc.polyfitRoRcalc:
                                 try:
+                                    aw.qmc.adderror("Running #6")  #dave
                                     time_vec = sample_ctimex2[-left_index:]
                                     temp_samples = sample_tstemp2[-left_index:]
                                     with warnings.catch_warnings():
