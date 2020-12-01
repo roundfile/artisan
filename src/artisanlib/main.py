@@ -190,7 +190,6 @@ class Artisan(QtSingleApplication):
     def __init__(self, args):
         super(Artisan, self).__init__(appGuid,viewerAppGuid,args)
 
-        self.focusChanged.connect(self.appRaised)
         self.sentToBackground = None # set to timestamp on putting app to background without any open dialog
         self.plus_sync_cache_expiration = 1*60 # how long a plus sync is valid in seconds
 
@@ -200,6 +199,7 @@ class Artisan(QtSingleApplication):
         else:
             self.artisanviewerMode = False
         self.messageReceived.connect(self.receiveMessage)
+        self.focusChanged.connect(self.appRaised)
 
     @pyqtSlot("QWidget*","QWidget*")
     def appRaised(self,oldFocusWidget,newFocusWidget):
@@ -210,7 +210,7 @@ class Artisan(QtSingleApplication):
                     try:
                         if aw is not None and aw.plus_account is not None and aw.qmc.roastUUID is not None and aw.curFile is not None and \
                                 libtime.time() - self.sentToBackground > self.plus_sync_cache_expiration:
-                                plus.sync.getUpdate(aw.qmc.roastUUID,aw.curFile)
+                            plus.sync.getUpdate(aw.qmc.roastUUID,aw.curFile)
                     except:
                         pass
                     self.sentToBackground = None
@@ -666,6 +666,7 @@ class tgraphcanvas(FigureCanvas):
     updateLargeLCDsTimeSignal = pyqtSignal(str)
     updateLargeLCDsReadingsSignal = pyqtSignal(str,str)
     updateLargeLCDsSignal = pyqtSignal(str,str,str)
+    setTimerLargeLCDcolorSignal = pyqtSignal(str,str)
     showAlarmPopupSignal = pyqtSignal(str,int)
     fileDirtySignal = pyqtSignal()
     fileCleanSignal = pyqtSignal()
@@ -680,6 +681,7 @@ class tgraphcanvas(FigureCanvas):
     toggleMonitorSignal = pyqtSignal()
     toggleRecorderSignal = pyqtSignal()
     processAlarmSignal = pyqtSignal(int,bool,int,str)
+    alarmsetSignal = pyqtSignal(int)
 
     def __init__(self,parent,dpi):
 
@@ -1465,10 +1467,14 @@ class tgraphcanvas(FigureCanvas):
         #background by value
         self.E1backgroundtimex,self.E2backgroundtimex,self.E3backgroundtimex,self.E4backgroundtimex = [],[],[],[]
         self.E1backgroundvalues,self.E2backgroundvalues,self.E3backgroundvalues,self.E4backgroundvalues = [],[],[],[]
-        self.l_backgroundeventtype1dots, = self.ax.plot(self.E1backgroundtimex, self.E1backgroundvalues, color="grey")
-        self.l_backgroundeventtype2dots, = self.ax.plot(self.E2backgroundtimex, self.E2backgroundvalues, color="darkgrey")
-        self.l_backgroundeventtype3dots, = self.ax.plot(self.E3backgroundtimex, self.E3backgroundvalues, color="slategrey")
-        self.l_backgroundeventtype4dots, = self.ax.plot(self.E4backgroundtimex, self.E4backgroundvalues, color="slateblue")
+#        self.l_backgroundeventtype1dots, = self.ax.plot(self.E1backgroundtimex, self.E1backgroundvalues, color="grey")
+#        self.l_backgroundeventtype2dots, = self.ax.plot(self.E2backgroundtimex, self.E2backgroundvalues, color="darkgrey")
+#        self.l_backgroundeventtype3dots, = self.ax.plot(self.E3backgroundtimex, self.E3backgroundvalues, color="slategrey")
+#        self.l_backgroundeventtype4dots, = self.ax.plot(self.E4backgroundtimex, self.E4backgroundvalues, color="slateblue")       
+        self.l_backgroundeventtype1dots = None
+        self.l_backgroundeventtype2dots = None
+        self.l_backgroundeventtype3dots = None
+        self.l_backgroundeventtype4dots = None
 
         # background Deltas
         self.DeltaETBflag = False
@@ -1763,6 +1769,7 @@ class tgraphcanvas(FigureCanvas):
         self.ETBdeltamarkersize = self.markersize_default
 
         #Temperature Alarms lists. Data is written in  alarmDlg
+        self.alarmsetlabel = ""
         self.alarmflag = []    # 0 = OFF; 1 = ON flags
         self.alarmguard = []   # points to another alarm by index that has to be triggered before; -1 indicates no guard
         self.alarmnegguard = []   # points to another alarm by index that should not has been triggered before; -1 indicates no guard
@@ -1791,12 +1798,33 @@ class tgraphcanvas(FigureCanvas):
         self.alarmstrings = []      # text descriptions, action to take, or filepath to call another program (comments after # are ignored)
         self.alarmtablecolumnwidths = []
         self.silent_alarms = False # if this is true (can be set via a Artisan Command button action "alarm(1)", alarms are triggered, but actions are not fired
+        
+        # alarm sets
+        self.alarmsets_count = 10 # number of alarm sets
+        self.alarmsets = []
+        for _ in range(self.alarmsets_count):
+            self.alarmsets.append([
+                "",
+                [], # alarmflags
+                [], # alarmguards
+                [], # alarmnegguards
+                [], # alarmtimes
+                [], # alarmoffsets
+                [], # alarmsources
+                [], # alarmconds
+                [], # alarmtemperatures
+                [], # alarmactions
+                [], # alarmbeeps
+                [], # alarmstrings
+            ])
 
         self.loadalarmsfromprofile = False # if set, alarms are loaded from profile
         self.loadalarmsfrombackground = False # if set, alarms are loaded from background profiles
         self.alarmsfile = "" # filename alarms were loaded from
         self.temporaryalarmflag = -3 #holds temporary index value of triggered alarm in updategraphics()
         self.TPalarmtimeindex = None # is set to the current  aw.qmc.timeindex by sample(), if alarms are defined and once the TP is detected
+
+        self.rsfile = "" # filename Ramp/Soak patterns were loaded from
 
         self.tempory_sample_trigger_redraw = False
 
@@ -1955,6 +1983,13 @@ class tgraphcanvas(FigureCanvas):
         self.l_eventtype2dots = None
         self.l_eventtype3dots = None
         self.l_eventtype4dots = None
+        
+        self.l_eteventannos = []
+        self.l_bteventannos = []
+        self.l_eventtype1annos = []
+        self.l_eventtype2annos = []
+        self.l_eventtype3annos = []
+        self.l_eventtype4annos = []
 
         self.l_annotations = []
         self.l_background_annotations = []
@@ -2071,6 +2106,8 @@ class tgraphcanvas(FigureCanvas):
         self.seriallogsemaphore = QSemaphore(1)
         self.eventactionsemaphore = QSemaphore(1)
         self.updateBackgroundSemaphore = QSemaphore(1)
+        self.alarmSemaphore = QSemaphore(1)
+        self.rampSoakSemaphore = QSemaphore(1)
 
         #flag to plot cross lines from mouse
         self.crossmarker = False
@@ -2229,6 +2266,7 @@ class tgraphcanvas(FigureCanvas):
         self.updategraphicsSignal.connect(self.updategraphics)
         self.updateLargeLCDsSignal.connect(self.updateLargeLCDs)
         self.updateLargeLCDsReadingsSignal.connect(self.updateLargeLCDsReadings)
+        self.setTimerLargeLCDcolorSignal.connect(self.setTimerLargeLCDcolor)
         self.showAlarmPopupSignal.connect(self.showAlarmPopup)
         self.updateLargeLCDsTimeSignal.connect(self.updateLargeLCDsTime)
         self.fileDirtySignal.connect(self.fileDirty)
@@ -2238,12 +2276,13 @@ class tgraphcanvas(FigureCanvas):
         self.markFCsSignal.connect(self.markFCsTrigger)
         self.markFCeSignal.connect(self.markFCeTrigger)
         self.markSCsSignal.connect(self.markSCsTrigger)
-        self.markSCeSignal.connect(self.markSCeTrigger)        
-        self.markDropSignal.connect(self.markDropTrigger)      
+        self.markSCeSignal.connect(self.markSCeTrigger)
+        self.markDropSignal.connect(self.markDropTrigger)
         self.markCoolSignal.connect(self.markCoolTrigger)
         self.toggleMonitorSignal.connect(self.toggleMonitorTigger)
         self.toggleRecorderSignal.connect(self.toggleRecorderTigger)
         self.processAlarmSignal.connect(self.processAlarm)
+        self.alarmsetSignal.connect(self.selectAlarmSet)
 
     #NOTE: empty Figure is initialy drawn at the end of aw.settingsload()
     #################################    FUNCTIONS    ###################################
@@ -2627,6 +2666,20 @@ class tgraphcanvas(FigureCanvas):
                         idx = self.labels.index(label)
                     except:
                         pass
+                    if label==aw.ETname:
+                        label = "ET"  #allows for a match below to the label in legend_lines
+                        try:
+                            for a in self.l_eteventannos:
+                                a.set_visible(not a.get_visible())
+                        except:
+                            pass
+                    if label==aw.BTname:
+                        label = "BT"  #allows for a match below to the label in legend_lines
+                        try:
+                            for a in self.l_bteventannos:
+                                a.set_visible(not a.get_visible())
+                        except:
+                            pass
                     try:
                         # toggle also the visibility of the legend handle
                         clean_label = label.replace(deltaLabelMathPrefix,deltaLabelUTF8)
@@ -2636,9 +2689,28 @@ class tgraphcanvas(FigureCanvas):
                     except:
                         pass
                 # toggle the visibility of the corresponding line
-                if idx is not None:
+                if idx is not None and artist:
                     artist = self.handles[idx]
                     artist.set_visible(not artist.get_visible())
+                    if self.eventsGraphflag in [2,3,4]:
+                        # if events are rendered in Combo style we need to hide also the corresponding annotations:
+                        try:
+                            i = [aw.arabicReshape(et) for et in self.etypes[:4]].index(label)
+                            if i == 0:
+                                for a in self.l_eventtype1annos:
+                                    a.set_visible(not a.get_visible())
+                            elif i == 1:
+                                for a in self.l_eventtype2annos:
+                                    a.set_visible(not a.get_visible())
+                            elif i == 2:
+                                for a in self.l_eventtype3annos:
+                                    a.set_visible(not a.get_visible())
+                            elif i == 3:
+                                for a in self.l_eventtype4annos:
+                                    a.set_visible(not a.get_visible())
+                        except:
+                            pass
+                            
 
             # show event information by clicking on event lines in step, step+ and combo modes
             elif isinstance(event.artist, matplotlib.lines.Line2D):
@@ -2900,6 +2972,9 @@ class tgraphcanvas(FigureCanvas):
             url = "http://127.0.0.1:" + str(aw.WebLCDsPort) + "/send"
             headers = {'content-type': 'application/json'}
             payload = {'data': {}}
+            if not (bt is None and et is None) and aw.qmc.flagon and not aw.qmc.flagstart:
+                # in monitoring only mode, timer might be set by PID RS
+                time = None
             if bt is not None:
                 payload['data']['bt'] = bt
             if et is not None:
@@ -2924,7 +2999,18 @@ class tgraphcanvas(FigureCanvas):
     def updateLargeLCDs(self,bt,et,time):
         try:
             if aw.largeLCDs_dialog is not None:
+                if aw.qmc.flagon and not aw.qmc.flagstart:
+                    # in monitoring only mode, timer might be set by PID RS
+                    time = None
                 aw.largeLCDs_dialog.updateValues([et],[bt],time=time)
+        except:
+            pass
+
+    @pyqtSlot(str,str)
+    def setTimerLargeLCDcolor(self,fc,bc):
+        try:
+            if aw.largeLCDs_dialog is not None:
+                aw.largeLCDs_dialog.setTimerLCDcolor(fc,bc)
         except:
             pass
     
@@ -3468,7 +3554,8 @@ class tgraphcanvas(FigureCanvas):
 
                     # if more than max cool (from statistics) past DROP and not yet COOLend turn the time LCD red:
                     if aw.qmc.timeindex[0]!=-1 and aw.qmc.timeindex[6] and not aw.qmc.timeindex[7] and len(self.timex) > self.timeindex[6]:
-                        aw.lcd1.setStyleSheet("QLCDNumber { border-radius: 4; color: %s; background-color: %s;}"%('#147bb3',aw.lcdpaletteB["timer"]))
+                        aw.lcd1.setStyleSheet("QLCDNumber { border-radius: 4; color: %s; background-color: %s;}"%(aw.lcdpaletteF["slowcoolingtimer"],aw.lcdpaletteB["slowcoolingtimer"]))
+                        aw.qmc.setTimerLargeLCDcolorSignal.emit(aw.lcdpaletteF["slowcoolingtimer"],aw.lcdpaletteB["slowcoolingtimer"])
 
                     self.setLCDtime(ts)
             finally:
@@ -3632,20 +3719,78 @@ class tgraphcanvas(FigureCanvas):
             if self.delta_ax:
                 self.delta_ax.lines = []
     
+    @pyqtSlot(int)
+    def getAlarmSet(self,n):
+        try:
+            self.alarmSemaphore.acquire(1)
+            if n >= 0 and n < len(self.alarmsets):
+                return self.alarmsets[n]
+            else:
+                return None
+        finally:
+            if self.alarmSemaphore.available() < 1:
+                self.alarmSemaphore.release(1)
+
+    def setAlarmSet(self,n,alarmset):
+        try:
+            self.alarmSemaphore.acquire(1)
+            self.alarmsets[n] = alarmset
+        finally:
+            if self.alarmSemaphore.available() < 1:
+                self.alarmSemaphore.release(1)
+
+    def selectAlarmSet(self,n):
+        alarmset = self.getAlarmSet(n)
+        if alarmset is not None:
+            try:
+                self.alarmSemaphore.acquire(1)
+                self.alarmsetlabel = alarmset[0]
+                self.alarmflag = alarmset[1][:]
+                self.alarmguard = alarmset[2][:]
+                self.alarmnegguard = alarmset[3][:]
+                self.alarmtime = alarmset[4][:]
+                self.alarmoffset = alarmset[5][:]
+                self.alarmsource = alarmset[6][:]
+                self.alarmcond = alarmset[7][:]
+                self.alarmtemperature = alarmset[8][:]
+                self.alarmaction = alarmset[9][:]
+                self.alarmbeep = alarmset[10][:]
+                self.alarmstrings = alarmset[11][:]
+                # update the alarmstate array to the new size:
+                self.alarmstate = [-1]*len(self.alarmflag)
+            finally:
+                if self.alarmSemaphore.available() < 1:
+                    self.alarmSemaphore.release(1)
+    
+    def findAlarmSet(self,label):
+        try:
+            self.alarmSemaphore.acquire(1)
+            for i in range(len(self.alarmsets)):
+                if self.alarmsets[i][0] == label:
+                    return i
+            return None
+        finally:
+            if self.alarmSemaphore.available() < 1:
+                self.alarmSemaphore.release(1)
+    
+    def makeAlarmSet(self,label,flag,guard,negguard,time,offset,source,cond,temperature,action,beep,alarmstrings):
+        return [label,flag,guard,negguard,time,offset,source,cond,temperature,action,beep,alarmstrings]
+    
     # number is alarmnumber+1 (the 1-based alarm number the user sees), for alarms triggered from outside the alarmtable (like PID RS alarms) number is 0
     @pyqtSlot(int,bool,int,str)
     def processAlarm(self,number,beep,action,string):
         if not self.silent_alarms:
-            if beep:
-                QApplication.beep()
             try:
+                self.alarmSemaphore.acquire(1)
+                if beep:
+                    QApplication.beep()
                 if action == 0:
                     self.showAlarmPopupSignal.emit(string,aw.qmc.alarm_popup_timout)
                 elif action == 1:
                     # alarm call program
                     fname = string.split('#')[0]
-    # take care, the QDir().current() directory changes with loads and saves
-    #                QDesktopServices.openUrl(QUrl("file:///" + str(QDir().current().absolutePath()) + "/" + fname, QUrl.TolerantMode))
+        # take c the QDir().current() directory changes with loads and saves
+        #            QDesktopServices.openUrl(QUrl("file:///" + str(QDir().current().absolutePath()) + "/" + fname, QUrl.TolerantMode))
                     if False and platf == 'Windows': # this Windows version fails on commands with arguments
                         f = "file:///{}/{}".format(QApplication.applicationDirPath(),fname)
                         res = QDesktopServices.openUrl(QUrl(f, QUrl.TolerantMode))
@@ -3714,7 +3859,7 @@ class tgraphcanvas(FigureCanvas):
                         _, _, exc_tb = sys.exc_info()
                         aw.qmc.adderror((QApplication.translate("Error Message","Exception:",None) + " setalarm() {0}").format(str(e)),exc_tb.tb_lineno)
                         aw.sendmessage(QApplication.translate("Message","Alarm trigger slider error, description '{0}' not a valid number [0-100]",None).format(string))
-
+    
                 elif action == 7:
                     # START
                     if aw.button_2.isEnabled():
@@ -3818,9 +3963,11 @@ class tgraphcanvas(FigureCanvas):
 
             except Exception as ex:
                 _, _, exc_tb = sys.exc_info()
-                aw.qmc.adderror((QApplication.translate("Error Message","Exception:",None) + " processAlarm() {0}").format(str(ex)),exc_tb.tb_lineno)    
-    
-    
+                self.adderror((QApplication.translate("Error Message","Exception:",None) + " processAlarm() {0}").format(str(ex)),exc_tb.tb_lineno)
+            finally:
+                if self.alarmSemaphore.available() < 1:
+                    self.alarmSemaphore.release(1)
+
 
     def setalarm(self,alarmnumber):
         self.alarmstate[alarmnumber] = max(0,len(self.timex) - 1) # we have to ensure that alarmstate of triggered alarms is never negativ
@@ -4976,7 +5123,7 @@ class tgraphcanvas(FigureCanvas):
     def reset(self,redraw=True,soundOn=True,sampling=False,keepProperties=False,fireResetAction=True):
         try:
             focused_widget = QApplication.focusWidget()
-            if focused_widget:
+            if focused_widget and focused_widget != aw.centralWidget():
                 focused_widget.clearFocus()
         except Exception:
             pass
@@ -5059,6 +5206,7 @@ class tgraphcanvas(FigureCanvas):
                     self.roastingnotes = ""
                     self.cuppingnotes = ""
                     self.beans = ""
+                    self.plus_location = None
                     self.plus_coffee = None
                     self.plus_blend_spec = None
                     self.weight = [0,0,self.weight[2]]
@@ -5131,6 +5279,7 @@ class tgraphcanvas(FigureCanvas):
                     self.endofx = 60
 
                 aw.lcd1.setStyleSheet("QLCDNumber { border-radius: 4; color: %s; background-color: %s;}"%(aw.lcdpaletteF["timer"],aw.lcdpaletteB["timer"]))
+                aw.qmc.setTimerLargeLCDcolorSignal.emit(aw.lcdpaletteF["timer"],aw.lcdpaletteB["timer"])
 
                 #roast flags
                 aw.qmc.heavyFC_flag = False
@@ -6240,7 +6389,7 @@ class tgraphcanvas(FigureCanvas):
                     self.set_xlabel("")
                 else:
                     y_label = self.ax.set_ylabel(self.mode,color=self.palette["ylabel"],rotation=0,labelpad=10,fontproperties=fontprop_large)
-                    self.set_xlabel(aw.arabicReshape(QApplication.translate("Label", "min",None)))
+                    self.set_xlabel(aw.arabicReshape(QApplication.translate("Label", "min","abbrev. of minutes")))
 
                 try:
                     y_label.set_in_layout(False) # remove y-axis labels from tight_layout calculation
@@ -6338,6 +6487,21 @@ class tgraphcanvas(FigureCanvas):
                 self.ax.spines['bottom'].set_color("0.40")
                 self.ax.spines['left'].set_color("0.40")
                 self.ax.spines['right'].set_color("0.40")
+                        
+                self.l_eventtype1dots = None
+                self.l_eventtype2dots = None
+                self.l_eventtype3dots = None
+                self.l_eventtype4dots = None
+                self.l_eteventannos = []
+                self.l_bteventannos = []
+                self.l_eventtype1annos = []
+                self.l_eventtype2annos = []
+                self.l_eventtype3annos = []
+                self.l_eventtype4annos = []
+                self.l_backgroundeventtype1dots = None
+                self.l_backgroundeventtype2dots = None
+                self.l_backgroundeventtype3dots = None
+                self.l_backgroundeventtype4dots = None
 
                 if aw.qmc.graphstyle:
                     self.ax.spines['left'].set_sketch_params(scale, length, randomness)
@@ -7153,6 +7317,7 @@ class tgraphcanvas(FigureCanvas):
                                                     fontproperties=eventannotationprop,
                                                     path_effects=[PathEffects.withStroke(linewidth=self.patheffects,foreground=self.palette["background"])],
                                                     )
+                                        self.l_eventtype1annos.append(anno)
                                         try:
                                             anno.set_in_layout(False)  # remove text annotations from tight_layout calculation
                                         except: # mpl before v3.0 do not have this set_in_layout() function
@@ -7187,6 +7352,7 @@ class tgraphcanvas(FigureCanvas):
                                                     fontproperties=eventannotationprop,
                                                     path_effects=[PathEffects.withStroke(linewidth=self.patheffects,foreground=self.palette["background"])],
                                                     )
+                                        self.l_eventtype2annos.append(anno)
                                         try:
                                             anno.set_in_layout(False)  # remove text annotations from tight_layout calculation
                                         except: # mpl before v3.0 do not have this set_in_layout() function
@@ -7222,6 +7388,7 @@ class tgraphcanvas(FigureCanvas):
                                                     fontproperties=eventannotationprop,
                                                     path_effects=[PathEffects.withStroke(linewidth=self.patheffects,foreground=self.palette["background"])],
                                                     )
+                                        self.l_eventtype3annos.append(anno)
                                         try:
                                             anno.set_in_layout(False)  # remove text annotations from tight_layout calculation
                                         except: # mpl before v3.0 do not have this set_in_layout() function
@@ -7256,6 +7423,7 @@ class tgraphcanvas(FigureCanvas):
                                                     fontproperties=eventannotationprop,
                                                     path_effects=[PathEffects.withStroke(linewidth=self.patheffects,foreground=self.palette["background"])],
                                                     )
+                                        self.l_eventtype4annos.append(anno)
                                         try:
                                             anno.set_in_layout(False)  # remove text annotations from tight_layout calculation
                                         except: # mpl before v3.0 do not have this set_in_layout() function
@@ -7451,6 +7619,10 @@ class tgraphcanvas(FigureCanvas):
                                             pass
                                         # register draggable flag annotation to be re-created after re-positioning on redraw
                                         self.l_event_flags_dict[i] = anno
+                                        if not aw.qmc.showeventsonbt and aw.qmc.ETcurve:
+                                            self.l_eteventannos.append(anno)
+                                        else:
+                                            self.l_bteventannos.append(anno)
                                     elif self.eventsGraphflag == 4:
                                         if thirdletter != "":
                                             firstletter = ""
@@ -7463,6 +7635,14 @@ class tgraphcanvas(FigureCanvas):
                                                      fontproperties=fontprop_small,
                                                      path_effects=[PathEffects.withStroke(linewidth=0.5,foreground=self.palette["background"])],
                                                      )
+                                        if self.specialeventstype[i] == 0:
+                                            self.l_eventtype1annos.append(anno)
+                                        elif self.specialeventstype[i] == 1:
+                                            self.l_eventtype2annos.append(anno)
+                                        elif self.specialeventstype[i] == 2:
+                                            self.l_eventtype3annos.append(anno)
+                                        elif self.specialeventstype[i] == 3:
+                                            self.l_eventtype4annos.append(anno)
                                         try:
                                             anno.set_in_layout(False)  # remove text annotations from tight_layout calculation
                                         except: # mpl before v3.0 do not have this set_in_layout() function
@@ -7605,6 +7785,9 @@ class tgraphcanvas(FigureCanvas):
                             aw.qmc.l_annotations = self.place_annotations(TP_index,aw.qmc.ylimit - aw.qmc.ylimit_min,self.timex,self.timeindex,self.temp2,self.stemp2)
                         if self.timeindex[6]:
                             self.writestatistics(TP_index)
+                    #add the time and temp annotations to the bt list
+                    for x in aw.qmc.l_annotations:
+                        self.l_bteventannos.append(x)
 
                 if not sampling and not aw.qmc.flagon and self.timeindex[6] and aw.qmc.statssummary:
                     self.statsSummary()
@@ -7795,8 +7978,14 @@ class tgraphcanvas(FigureCanvas):
                 e = self.backgroundEvalues[eventnum]
                 y1 = self.temp1B[self.backgroundEvents[eventnum]]
                 y2 = self.temp2B[self.backgroundEvents[eventnum]]
-                delta1 = self.delta1B[self.backgroundEvents[eventnum]]
-                delta2 = self.delta2B[self.backgroundEvents[eventnum]]
+                try:
+                    delta1 = str(aw.float2float(self.delta1B[self.backgroundEvents[eventnum]])) if self.delta1B[self.backgroundEvents[eventnum]] != None else "--"
+                except:
+                    delta1 = "\u03C5\u03c5"
+                try:
+                    delta2 = str(aw.float2float(self.delta2B[self.backgroundEvents[eventnum]])) if self.delta2B[self.backgroundEvents[eventnum]] != None else "--"
+                except:
+                    delta2 = "\u03C5\u03c5"
                 descr = self.backgroundEStrings[eventnum]
                 etype = self.Betypes[self.backgroundEtypes[eventnum]]
                 sliderunit = aw.eventsliderunits[self.backgroundEtypes[eventnum]]
@@ -7836,8 +8025,8 @@ class tgraphcanvas(FigureCanvas):
                     e = 6.0  #50
                 y1 = 420 if self.mode=='F' else 210
                 y2 = 340 if self.mode=='F' else 170
-                delta1 = 18 if self.mode=='F' else 9
-                delta2 = 33 if self.mode=='F' else 16
+                delta1 = str(18.2 if self.mode=='F' else 9.1)
+                delta2 = str(33.4 if self.mode=='F' else 16.2)
                 descr = "Full"
                 etype = "Air"
                 sliderunit = "kPa"
@@ -7853,8 +8042,14 @@ class tgraphcanvas(FigureCanvas):
                 e = self.specialeventsvalue[eventnum]
                 y1 = self.temp1[self.specialevents[eventnum]]
                 y2 = self.temp2[self.specialevents[eventnum]]
-                delta1 = self.delta1[self.specialevents[eventnum]]
-                delta2 = self.delta2[self.specialevents[eventnum]]
+                try:
+                    delta1 = str(aw.float2float(self.delta1[self.specialevents[eventnum]])) if self.delta1[self.specialevents[eventnum]] != None else "--"
+                except:
+                    delta1 = "\u03C5\u03c5"
+                try:
+                    delta2 = str(aw.float2float(self.delta2[self.specialevents[eventnum]])) if self.delta2[self.specialevents[eventnum]] != None else "--"
+                except:
+                    delta2 = "\u03C5\u03c5"
                 descr = self.specialeventsStrings[eventnum]
                 etype = self.etypes[self.specialeventstype[eventnum]]
                 sliderunit = aw.eventsliderunits[self.specialeventstype[eventnum]]
@@ -7885,8 +8080,8 @@ class tgraphcanvas(FigureCanvas):
             # Caution - the event field "E" is position dependent and must be the first entry in the fields list
             fields = [
                 ("E", str(aw.qmc.eventsInternal2ExternalValue(e))),
-                ("Y1", str(aw.float2float(y1,0))),
-                ("Y2", str(aw.float2float(y2,0))),
+                ("Y1", str(aw.float2float(y1,aw.qmc.LCDdecimalplaces))),
+                ("Y2", str(aw.float2float(y2,aw.qmc.LCDdecimalplaces))),
                 ("descr", str(descr)),
                 ("type", str(etype)),
                 ("sldrunit", str(sliderunit)),
@@ -7898,10 +8093,10 @@ class tgraphcanvas(FigureCanvas):
                 ("degmode", '\u00b0' + self.mode),
                 ("degmin", '\u00b0' + self.mode + '/min'),
                 ("deg", '\u00b0'),
-                ("R1degmin", str(aw.float2float(delta1,1)) + '\u00b0' + self.mode + '/min' if delta1 is not None else ''),
-                ("R2degmin", str(aw.float2float(delta2,1)) + '\u00b0' + self.mode + '/min' if delta2 is not None else ''),
-                ("R1", str(aw.float2float(delta1,1)) if delta1 is not None else '--'),
-                ("R2", str(aw.float2float(delta2,1)) if delta1 is not None else '--'),
+                ("R1degmin", delta1 + '\u00b0' + self.mode + '/min'),
+                ("R2degmin", delta2 + '\u00b0' + self.mode + '/min'),
+                ("R1", delta1),
+                ("R2", delta2),
                 ("squot", "'"),
                 ("quot", '"'),
                 ]
@@ -8549,7 +8744,7 @@ class tgraphcanvas(FigureCanvas):
             aw.sendmessage(QApplication.translate("Message","Colors set to defaults", None))
             fname = os.path.join(aw.getResourcePath(),"Themes","Artisan","Default.athm")
             if os.path.isfile(fname) and not self.flagon:
-                aw.loadSettings(fn=fname,remember=False,reset=False)
+                aw.loadSettings_theme(fn=fname,remember=False,reset=False)
                 aw.sendmessage(QApplication.translate("Message","Colors set to Default Theme", None))
             else:
                 for key in list(self.palette1.keys()):
@@ -9389,6 +9584,10 @@ class tgraphcanvas(FigureCanvas):
             aw.qmc.ax.set_ylabel("")
             if not aw.qmc.title_show_always:
                 aw.qmc.setProfileTitle("")
+            
+            # reset LCD timer color that might have been reset by the RS PID in monitoring mode:
+            aw.lcd1.setStyleSheet("QLCDNumber { border-radius: 4; color: %s; background-color: %s;}"%(aw.lcdpaletteF["timer"],aw.lcdpaletteB["timer"]))
+            aw.qmc.setTimerLargeLCDcolorSignal.emit(aw.lcdpaletteF["timer"],aw.lcdpaletteB["timer"])
             if aw.qmc.delta_ax:
                 y_label = aw.qmc.delta_ax.set_ylabel("")
                 try:
@@ -11034,7 +11233,7 @@ class tgraphcanvas(FigureCanvas):
                         msg += sep + u"#" + str(aw.qmc.ground_color)
                     self.set_xlabel(msg)
             else:
-                self.set_xlabel(aw.arabicReshape(QApplication.translate("Label", "min",None)))
+                self.set_xlabel(aw.arabicReshape(QApplication.translate("Label", "min","abbrev. of minutes")))
         except Exception as ex:
 #            import traceback
 #            traceback.print_exc(file=sys.stdout)
@@ -14310,6 +14509,10 @@ class ApplicationWindow(QMainWindow):
     soundpopSignal = pyqtSignal()
     setCanvasColorSignal = pyqtSignal(str)
     resetCanvasColorSignal = pyqtSignal()
+    setbuttonsfromSignal = pyqtSignal(int)
+    loadBackgroundSignal = pyqtSignal(str)
+    clearBackgroundSignal = pyqtSignal()
+    adjustSVSignal = pyqtSignal(int)
 
     def __init__(self, parent = None):
 
@@ -14404,6 +14607,7 @@ class ApplicationWindow(QMainWindow):
         self.editGraphDlg_activeTab = 0 # roast properties dialog
         self.backgroundDlg_activeTab = 0
         self.DeviceAssignmentDlg_activeTab = 0
+        self.AlarmDlg_activeTab = 0
 
         #flag to reset Qsettings
         self.resetqsettings = 0
@@ -14542,6 +14746,8 @@ class ApplicationWindow(QMainWindow):
             "deltaet":'#EBEBEB', #'black',
             "deltabt":'#EBEBEB', #'black',
             "sv":'#F8F8F8', #'black'
+            "rstimer":'#F8F8F8',
+            "slowcoolingtimer":'#F8F8F8',
             }
         self.lcdpaletteF = {
             "timer":'#262626',
@@ -14549,7 +14755,9 @@ class ApplicationWindow(QMainWindow):
             "bt":'white', #'white',
             "deltaet":'#cc0f50', #'white',
             "deltabt":'#0A5C90', #'white',
-            "sv":'#4C4C4C'
+            "sv":'#4C4C4C',
+            "rstimer":'#187AB3',
+            "slowcoolingtimer":'#CC0D50',
             }
 
         #user defined event buttons
@@ -16612,8 +16820,40 @@ class ApplicationWindow(QMainWindow):
         self.buttonlist = []
         self.lastbuttonpressed = -1
         self.buttonlistmaxlen = 11
+        self.buttonpalette_default_label = ""
+        self.buttonpalette_label = self.buttonpalette_default_label
         #10 palettes of buttons
-        self.buttonpalette = [[],[],[],[],[],[],[],[],[],[]] # ,[],[],[],[],[]]
+        self.buttonpalette = []
+        for i in range(10):
+            self.buttonpalette.append([
+                self.extraeventstypes[:],
+                self.extraeventsvalues[:],
+                self.extraeventsactions[:],
+                self.extraeventsvisibility[:],
+                self.extraeventsactionstrings[:],
+                self.extraeventslabels[:],
+                self.extraeventsdescriptions[:],
+                self.extraeventbuttoncolor[:],
+                self.extraeventbuttontextcolor[:],
+
+                self.eventslidervisibilities[:],
+                self.eventslideractions[:],
+                self.eventslidercommands[:],
+                self.eventslideroffsets[:],
+                self.eventsliderfactors[:],
+                self.eventquantifieractive[:],
+                self.eventquantifiersource[:],
+                self.eventquantifiermin[:],
+                self.eventquantifiermax[:],
+                self.eventquantifiercoarse[:],
+                self.eventslidermin[:],
+                self.eventslidermax[:],
+                self.eventslidercoarse[:],
+                self.eventslidertemp[:],
+                self.eventsliderunits[:],
+                self.eventsliderBernoulli[:],
+                self.buttonpalette_label
+                ])
         self.buttonpalettemaxlen = [14]*10  #keeps max number of buttons per row per palette
         self.buttonpalette_shortcuts = True # if True palettes can be changed via the number keys
         self.buttonsize = 1 # 0: tiny, 1: small (default), 2: large
@@ -17127,7 +17367,7 @@ class ApplicationWindow(QMainWindow):
             string += QApplication.translate("Message","Caution, the only way to share settings between Artisan and ArtisanViewer is to explicitly save and load them using 'Help>Save Settings' and 'Help>Load Settings'.", None) + "\n\n"
             string += QApplication.translate("Message","Enjoy using ArtisanViewer,", None) +"\n"
             string += QApplication.translate("Message","The Artisan Team", None)
-            QMessageBox.information(aw,QApplication.translate("Message","OprocessSingleShotPhidgetsPulsene time message about ArtisanViewer", None),string)
+            QMessageBox.information(aw,QApplication.translate("Message","One time message about ArtisanViewer", None),string)
             settings.setValue("Mode",self.qmc.mode)  #prevent this popup in case a second instance is started before this first one is closed.
 
         # we connect the signals
@@ -17139,7 +17379,10 @@ class ApplicationWindow(QMainWindow):
         self.soundpopSignal.connect(self.soundpop)
         self.setCanvasColorSignal.connect(self.setCanvasColor)
         self.resetCanvasColorSignal.connect(self.resetCanvasColor)
-
+        self.setbuttonsfromSignal.connect(self.setbuttonsfrom)
+        self.loadBackgroundSignal.connect(self.loadbackgroundRedraw)
+        self.clearBackgroundSignal.connect(self.clearbackgroundRedraw)
+        self.adjustSVSignal.connect(self.adjustPIDsv)
 
         if sys.platform.startswith("darwin"):
             # only on macOS we install the eventFilter to catch the signal on switching between light and dark modes
@@ -17165,6 +17408,7 @@ class ApplicationWindow(QMainWindow):
         try:
             if "canvas_alt" in aw.qmc.palette:
                 aw.qmc.palette["canvas"] = aw.qmc.palette["canvas_alt"]
+                aw.qmc.palette.pop("canvas_alt")
                 aw.updateCanvasColors()
                 aw.qmc.redraw()
         except:
@@ -18269,6 +18513,10 @@ class ApplicationWindow(QMainWindow):
         aw.lcdpaletteF["deltabt"] = "white"
         aw.lcdpaletteB["sv"] = "black"
         aw.lcdpaletteF["sv"] = "white"
+        aw.lcdpaletteB["rstimer"] = "white"
+        aw.lcdpaletteF["rstimer"] = "black"
+        aw.lcdpaletteB["slowcoolingtimer"] = "black"
+        aw.lcdpaletteF["slowcoolingtimer"] = "white"
         aw.lcd1.setStyleSheet("QLCDNumber { border-radius: 4; color: %s; background-color: %s;}"%(aw.lcdpaletteF["timer"],aw.lcdpaletteB["timer"]))
         aw.lcd2.setStyleSheet("QLCDNumber { border-radius: 4; color: %s; background-color: %s;}"%(aw.lcdpaletteF["et"],aw.lcdpaletteB["et"]))
         aw.lcd3.setStyleSheet("QLCDNumber { border-radius: 4; color: %s; background-color: %s;}"%(aw.lcdpaletteF["bt"],aw.lcdpaletteB["bt"]))
@@ -18813,10 +19061,12 @@ class ApplicationWindow(QMainWindow):
         else:
             return QColorDialog.getColor(c) # blocks on Mac OS X in the build
 
+    @pyqtSlot(int)
     def adjustPIDsv(self,x):
         if self.qmc.device == 0: # Fuji PID
             self.fujipid.adjustsv(x)
-        elif self.qmc.device == 19: # Arduino TC4
+#        elif self.qmc.device == 19: # Arduino TC4
+        else: # Arduino TC4, internal Software PID or MODBUS/S7 extenal PID
             self.pidcontrol.adjustsv(x)
 
     @pyqtSlot(bool)
@@ -21109,6 +21359,7 @@ class ApplicationWindow(QMainWindow):
                                     cmds = eval(cs[len('tare'):])
                                     if isinstance(cmds,int):
                                         aw.setTare(cmds-1)
+                                        self.sendmessage("Artisan Command: {}".format(cs))
                                 except Exception:
                                     pass
                             elif cs == "PIDon":
@@ -21191,12 +21442,14 @@ class ApplicationWindow(QMainWindow):
                                 try:
                                     color = cs[len("setCanvasColor("):-1]
                                     self.setCanvasColorSignal.emit(color)
+                                    self.sendmessage("Artisan Command: {}".format(cs))
                                 except:
                                     pass
                             # resetCanvasColor()
                             elif cs == "resetCanvasColor":
                                 try:
                                     self.resetCanvasColorSignal.emit()
+                                    self.sendmessage("Artisan Command: {}".format(cs))
                                 except:
                                     pass
                             # button(<e>) with <e> one of { ON, START, CHARGE, DRY, FCs, FCe, SCs, SCe, DROP, COOL, OFF }
@@ -21225,6 +21478,9 @@ class ApplicationWindow(QMainWindow):
                                         self.qmc.markCoolSignal.emit()
                                     elif event == "OFF" and self.qmc.flagon:
                                         self.qmc.toggleMonitorSignal.emit()
+                                    else:
+                                        return
+                                    self.sendmessage("Artisan Command: {}".format(cs))
                                 except:
                                     pass
                             # p-i-d(<p>,<i>,<d>) with <p>, <i>, <d> numbers to set the p-i-d parameters
@@ -21243,35 +21499,41 @@ class ApplicationWindow(QMainWindow):
                                                 N = self.fujipid.getCurrentPIDnumberPXG()
                                                 # 2. call setpid(self,k) with k that active pid
                                                 self.fujipid.setpidPXG(N,kp,ki,kd)
+                                                self.sendmessage("Artisan Command: {}".format(cs))
                                             elif self.ser.controlETpid[0] == 1: # PRG
                                                 self.fujipid.setpidPXR("p",kp)
                                                 libtime.sleep(0.035)
                                                 self.fujipid.setpidPXR("i",ki)
                                                 libtime.sleep(0.035)
                                                 self.fujipid.setpidPXR("d",kd)
+                                                self.sendmessage("Artisan Command: {}".format(cs))
                                             elif self.ser.controlETpid[0] == 4: # PXF
                                                 # 1. get current PID
                                                 N = self.fujipid.getCurrentPIDnumberPXF()
                                                 # 2. call setpid(self,k) with k that active pid
                                                 self.fujipid.setpidPXF(N,kp,ki,kd)
+                                                self.sendmessage("Artisan Command: {}".format(cs))
                                         else:
                                             self.pidcontrol.confPID(kp,ki,kd,pOnE=self.pidcontrol.pOnE)
+                                            self.sendmessage("Artisan Command: {}".format(cs))
                                 except:
                                     pass
                             # pidSV(<n>) with <n> a number to be used as PID SV
                             elif cs.startswith("pidSV(") and cs.endswith(")"):
                                 try:
-                                    sv = max(0,float(cs[len("pidSV("):-1])) # we don't send SV < 0
+                                    sv = max(0,int(eval(cs[len("pidSV("):-1]))) # we don't send SV < 0
                                     if self.qmc.device == 0 and sv != aw.fujipid.sv:
                                         self.fujipid.setsv(sv,silent=True)
+                                        self.sendmessage("Artisan Command: {}".format(cs))
                                     elif sv != aw.pidcontrol.sv:
                                         self.pidcontrol.setSV(sv,init=False)
+                                        self.sendmessage("Artisan Command: {}".format(cs))
                                 except:
                                     pass
                             # pidRS(<n>) with <n> a number to be used to select the PID RS pattern (1-based for the internal software PID)
                             elif cs.startswith("pidRS(") and cs.endswith(")"):
                                 try:
-                                    rs = int(cs[len("pidRS("):-1])
+                                    rs = int(eval(cs[len("pidRS("):-1]))
                                     if self.qmc.device == 0 or self.qmc.device == 26:
                                         if self.ser.controlETpid[0] == 0: # PXG
                                             pass
@@ -21281,18 +21543,84 @@ class ApplicationWindow(QMainWindow):
                                             pass
                                     else:
                                         if rs>0:
-                                            aw.pidcontrol.setRSpattern(rs-1)
+                                            self.pidcontrol.setRSpattern(rs-1)
+                                            self.sendmessage("Artisan Command: {}".format(cs))
                                 except:
-                                    pass
+                                    # might be a label
+                                    try:
+                                        label = str(cs[len("pidRS("):-1])
+                                        rs = self.pidcontrol.findRSset(label) # here rs is 0-based!!
+                                        if rs is not None:
+                                            self.pidcontrol.setRSpattern(rs)
+                                            self.sendmessage("Artisan Command: {}".format(cs))
+                                    except:
+                                        pass
                             # pidSource(<n>) with <n> 0: BT, 1: ET (Artisan internal software PID); <n> in {0,..,3} (Arduino PID)
                             elif cs.startswith("pidSource(") and cs.endswith(")"):
                                 try:
-                                    source = cs[len("pidSource("):-1]
+                                    source = int(cs[len("pidSource("):-1])
                                     if self.qmc.device != 0 and self.qmc.device != 26:
-                                        kp = self.aw.pidcontrol.pidKp
-                                        ki = self.aw.pidcontrol.pidKi
-                                        kd = self.aw.pidcontrol.pidKd
+                                        kp = aw.pidcontrol.pidKp
+                                        ki = aw.pidcontrol.pidKi
+                                        kd = aw.pidcontrol.pidKd
                                         self.pidcontrol.confPID(kp,ki,kd,pOnE=self.pidcontrol.pOnE,source=source)
+                                        self.sendmessage("Artisan Command: {}".format(cs))
+                                except:
+                                    pass
+                            # palette(<n>) with <n> a number between 0 and 9 or an existing palette label
+                            elif cs.startswith("palette(") and cs.endswith(")"):
+                                try:
+                                    p = min(9,max(0,int(cs[len("palette("):-1])))
+                                    self.setbuttonsfromSignal.emit(p)
+                                    self.sendmessage("Artisan Command: {}".format(cs))
+                                except:
+                                    # might be a label
+                                    try:
+                                        label = str(cs[len("palette("):-1])
+                                        p = self.findPalette(label)
+                                        if p is not None:
+                                            self.setbuttonsfromSignal.emit(p)
+                                            self.sendmessage("Artisan Command: {}".format(cs))
+                                    except:
+                                        pass
+                            # loadBackground(<filepath>)
+                            elif cs.startswith("loadBackground(") and cs.endswith(")"):
+                                try:
+                                    fp = str(cs[len("loadBackground("):-1])
+                                    self.loadBackgroundSignal.emit(fp)
+                                    self.sendmessage("Artisan Command: {}".format(cs))
+                                except:
+                                    pass
+                            # clearBackground
+                            elif cs == "clearBackground":
+                                try:
+                                    self.clearBackgroundSignal.emit()
+                                    self.sendmessage("Artisan Command: {}".format(cs))
+                                except:
+                                    pass
+                            # alarmset(<n>) with <n> a number between 0 and 9 or an existing alarmset label
+                            elif cs.startswith("alarmset(") and cs.endswith(")"):
+                                try:
+                                    p = min(9,max(0,int(cs[len("alarmset("):-1])))
+                                    self.qmc.alarmsetSignal.emit(p)
+                                    self.sendmessage("Artisan Command: {}".format(cs))
+                                except:
+                                    # might be a label
+                                    try:
+                                        label = str(cs[len("alarmset("):-1])
+                                        p = self.qmc.findAlarmSet(label)
+                                        if p is not None:
+                                            self.qmc.alarmsetSignal.emit(p)
+                                            self.sendmessage("Artisan Command: {}".format(cs))
+                                    except:
+                                        pass
+                            # adjustSV(<n>) adds <n> to the current SV. Note that n can be negativex
+                            elif cs.startswith("adjustSV(") and cs.endswith(")"):
+                                try:
+                                    sv_offset = int(eval(cs[len("adjustSV("):-1]))
+                                    if self.qmc.device != 0 and self.qmc.device != 26:
+                                        self.adjustSVSignal.emit(sv_offset)
+                                        self.sendmessage("Artisan Command: {}".format(cs))
                                 except:
                                     pass
                 elif action == 21: # RC Command
@@ -21869,7 +22197,7 @@ class ApplicationWindow(QMainWindow):
 
     def hideExtraButtons(self,changeDefault=True):
         focused_widget = QApplication.focusWidget()
-        if focused_widget:
+        if focused_widget and focused_widget != aw.centralWidget():
             focused_widget.clearFocus()
         self.extrabuttondialogs.setVisible(False)
         aw.buttonsAction.setChecked(False)
@@ -21884,7 +22212,7 @@ class ApplicationWindow(QMainWindow):
 
     def showExtraButtons(self,changeDefault=True):
         focused_widget = QApplication.focusWidget()
-        if focused_widget:
+        if focused_widget and focused_widget != aw.centralWidget():
             focused_widget.clearFocus()
         self.extrabuttondialogs.setVisible(True)
         aw.buttonsAction.setChecked(True)
@@ -21923,7 +22251,7 @@ class ApplicationWindow(QMainWindow):
 
     def hideSliders(self,changeDefault=True):
         focused_widget = QApplication.focusWidget()
-        if focused_widget:
+        if focused_widget and focused_widget != aw.centralWidget():
             focused_widget.clearFocus()
         self.setSliderFocusPolicy(Qt.NoFocus)
         self.slider1.setVisible(False)
@@ -21944,7 +22272,7 @@ class ApplicationWindow(QMainWindow):
 
     def showSliders(self,changeDefault=True):
         focused_widget = QApplication.focusWidget()
-        if focused_widget:
+        if focused_widget and focused_widget != aw.centralWidget():
             focused_widget.clearFocus()
         self.sliderFrame.setVisible(True)
         self.slider1.setVisible(True)
@@ -23359,6 +23687,10 @@ class ApplicationWindow(QMainWindow):
 
     def loadAlarmsFromProfile(self,filename,profile):
         self.qmc.alarmsfile = filename
+        if "alarmsetlabel" in profile:
+            self.qmc.alarmsetlabel = profile["alarmsetlabel"]
+        else:
+            self.qmc.alarmsetlabel = ""
         if "alarmflag" in profile:
             self.qmc.alarmflag = profile["alarmflag"]
         else:
@@ -23405,6 +23737,23 @@ class ApplicationWindow(QMainWindow):
             self.qmc.alarmstrings = [""]*len(self.qmc.alarmflag)
         self.qmc.alarmstate = [-1]*len(self.qmc.alarmflag)  #-1 = not triggered; otherwise idx = triggered
 
+    def loadRampSoakFromProfile(self,filename,profile):
+        self.qmc.rsfile = filename
+        if "svLabel" in profile:
+            self.pidcontrol.svLabel = str(profile["svLabel"])
+        if "svValues" in profile:
+            self.pidcontrol.svValues = [int(x) for x in profile["svValues"]]
+        if "svRamps" in profile:
+            self.pidcontrol.svRamps = [int(x) for x in profile["svRamps"]]
+        if "svSoaks" in profile:
+            self.pidcontrol.svSoaks = [int(x) for x in profile["svSoaks"]]
+        if "svActions" in profile:
+            self.pidcontrol.svActions = [int(x) for x in profile["svActions"]]
+        if "svBeeps" in profile:
+            self.pidcontrol.svBeeps = [bool(x) for x in profile["svBeeps"]]
+        if "svDescriptions" in profile:
+            self.pidcontrol.svDescriptions = [str(x) for x in profile["svDescriptions"]]
+
     # returns True if data got updated, False otherwise
     def updateSymbolicETBT(self):
         try:
@@ -23439,7 +23788,7 @@ class ApplicationWindow(QMainWindow):
                 return False
         except Exception as ex:
             _, _, exc_tb = sys.exc_info()
-            self.aw.qmc.adderror((QApplication.translate("Error Message", "Exception:",None) + "updateSymbolicETBT(): {0}").format(str(ex)),exc_tb.tb_lineno)
+            self.qmc.adderror((QApplication.translate("Error Message", "Exception:",None) + "updateSymbolicETBT(): {0}").format(str(ex)),exc_tb.tb_lineno)
 
     # returns True if data got updated, False otherwise
     def calcVirtualdevices(self,update=False):
@@ -23514,6 +23863,29 @@ class ApplicationWindow(QMainWindow):
                 return False
         else:
             return False
+    
+    @pyqtSlot()
+    def clearbackgroundRedraw(self):
+        self.deleteBackground()
+        self.qmc.redraw()
+
+    @pyqtSlot(str)
+    def loadbackgroundRedraw(self,filename):
+        if filename is None or len(filename) == 0:
+            return
+        try:
+            filename = os.path.expanduser(filename) # expand users home directory abbreviation
+        except:
+            pass
+        if os.path.isfile(filename):
+            try:
+                self.sendmessage(QApplication.translate("Message","Reading background profile...",None))
+                self.qmc.resetlinecountcaches()
+                self.loadbackground(filename)
+                self.qmc.background = True
+                self.qmc.timealign(redraw=True)
+            except:
+                self.deleteBackground() # delete a loaded background if any
 
     # Loads background profile
     def loadbackground(self,filename):
@@ -23631,6 +24003,9 @@ class ApplicationWindow(QMainWindow):
                 if self.qmc.loadalarmsfrombackground:
                     self.loadAlarmsFromProfile(filename,profile)
 
+                # Ramp/Soak Profiles
+                if self.pidcontrol.loadRampSoakFromBackground:
+                    self.loadRampSoakFromProfile(filename,profile)
 
                 #if old format < 0.5.0 version  (identified by numbers less than 1.). convert
                 if self.qmc.backgroundFlavors[0] < 1. and self.qmc.backgroundFlavors[-1] < 1.:
@@ -24319,6 +24694,7 @@ class ApplicationWindow(QMainWindow):
                 if slider_power != -1 and slider_fan != -1:
                     data_action = csv.reader(infile,delimiter='|')
 
+                    aw.qmc.alarmsetlabel = ""
                     aw.qmc.alarmflag = []
                     aw.qmc.alarmguard = []
                     aw.qmc.alarmnegguard = []
@@ -25517,19 +25893,8 @@ class ApplicationWindow(QMainWindow):
                     self.qmc.profile_sampling_interval = (self.qmc.timex[-1] - self.qmc.timex[0])/(len(self.qmc.timex) -1)
             self.qmc.updateDeltaSamples()
             # Ramp/Soak Profiles
-            if aw.pidcontrol.loadRampSoakFromProfile:
-                if "svValues" in profile:
-                    aw.pidcontrol.svValues = [int(x) for x in profile["svValues"]]
-                if "svRamps" in profile:
-                    aw.pidcontrol.svRamps = [int(x) for x in profile["svRamps"]]
-                if "svSoaks" in profile:
-                    aw.pidcontrol.svSoaks = [int(x) for x in profile["svSoaks"]]
-                if "svActions" in profile:
-                    aw.pidcontrol.svActions = [int(x) for x in profile["svActions"]]
-                if "svBeeps" in profile:
-                    aw.pidcontrol.svBeeps = [bool(x) for x in profile["svBeeps"]]
-                if "svDescriptions" in profile:
-                    aw.pidcontrol.svDescriptions = [str(x) for x in profile["svDescriptions"]]
+            if self.pidcontrol.loadRampSoakFromProfile:
+                self.loadRampSoakFromProfile(filename,profile)
             if "timeindex" in profile:
                 self.qmc.timeindex = profile["timeindex"]
                 if self.qmc.locktimex:
@@ -26007,6 +26372,7 @@ class ApplicationWindow(QMainWindow):
             profile["extraNoneTempHint1"] = self.qmc.extraNoneTempHint1
             profile["extraNoneTempHint2"] = self.qmc.extraNoneTempHint2
             #alarms
+            profile["alarmsetlabel"] = self.qmc.alarmsetlabel
             profile["alarmflag"] = self.qmc.alarmflag
             profile["alarmguard"] = self.qmc.alarmguard
             profile["alarmnegguard"] = self.qmc.alarmnegguard
@@ -26025,6 +26391,7 @@ class ApplicationWindow(QMainWindow):
             #write only:
             profile["samplinginterval"] = self.qmc.profile_sampling_interval
             profile["oversampling"] = self.qmc.oversampling
+            profile["svLabel"] = aw.pidcontrol.svLabel
             profile["svValues"] = aw.pidcontrol.svValues
             profile["svRamps"] = aw.pidcontrol.svRamps
             profile["svSoaks"] = aw.pidcontrol.svSoaks
@@ -27135,6 +27502,11 @@ class ApplicationWindow(QMainWindow):
             settings.beginGroup("Alarms")
             if settings.contains("alarmtime"):
                 self.qmc.alarmflag = [toInt(x) for x in toList(settings.value("alarmflag",self.qmc.alarmflag))]
+                if settings.contains("alarmsetlabel"):
+                    self.qmc.alarmsetlabel = toString(settings.value("alarmsetlabel",self.qmc.alarmsetlabel))
+                else:
+                    self.qmc.alarmsetlabel = ""
+                    
                 if settings.contains("alarmguard"):
                     self.qmc.alarmguard = [toInt(x) for x in toList(settings.value("alarmguard",self.qmc.alarmguard))]
                 else:
@@ -27186,6 +27558,10 @@ class ApplicationWindow(QMainWindow):
                     self.qmc.alarm_popup_timout = toInt(settings.value("alarm_popup_timout",aw.qmc.alarm_popup_timout))
                 if settings.contains("alarmtablecolumnwidths"):
                     self.qmc.alarmtablecolumnwidths = [toInt(x) for x in toList(settings.value("alarmtablecolumnwidths",self.qmc.alarmtablecolumnwidths))]
+                if settings.contains("alarmsets"):
+                    self.qmc.alarmsets = toList(settings.value("alarmsets",self.qmc.alarmsets))
+                if settings.contains("alarmsetlabel"):
+                    self.qmc.alarmsetlabel = toString(settings.value("alarmsetlabel",self.qmc.alarmsetlabel))
             settings.endGroup()
             #restore TC4/Arduino PID settings
             settings.beginGroup("ArduinoPID")
@@ -27206,6 +27582,10 @@ class ApplicationWindow(QMainWindow):
                 aw.pidcontrol.svSliderMin = toInt(settings.value("svSliderMin",aw.pidcontrol.svSliderMin))
                 aw.pidcontrol.svSliderMax = toInt(settings.value("svSliderMax",aw.pidcontrol.svSliderMax))
                 aw.pidcontrol.svValue = toInt(settings.value("svValue",aw.pidcontrol.svValue))
+                if settings.contains("loadRampSoakFromBackground"):
+                    aw.pidcontrol.loadRampSoakFromBackground = bool(toBool(settings.value("loadRampSoakFromBackground",aw.pidcontrol.loadRampSoakFromBackground)))
+                if settings.contains("svLabel"):
+                    aw.pidcontrol.svLabel = toString(settings.value("svLabel",aw.pidcontrol.svLabel))
 
                 aw.sliderSV.blockSignals(True)
                 if settings.contains("dutyMin"):
@@ -27228,6 +27608,9 @@ class ApplicationWindow(QMainWindow):
                     aw.pidcontrol.pOnE = bool(toBool(settings.value("pOnE",aw.pidcontrol.pOnE)))
                 
                 for n in range(aw.pidcontrol.RSLen):
+                    svLabelLabel = "RS_svLabel"+str(n)
+                    if settings.contains(svLabelLabel):
+                        aw.pidcontrol.RS_svLabels[n] = toString(settings.value(svLabelLabel,aw.pidcontrol.RS_svLabels[n]))
                     svValuesLabel = "RS_svValues"+str(n)
                     if settings.contains(svValuesLabel):
                         aw.pidcontrol.RS_svValues[n] = [toInt(x) for x in toList(settings.value(svValuesLabel,aw.pidcontrol.RS_svValues[n]))]
@@ -27806,12 +28189,14 @@ class ApplicationWindow(QMainWindow):
                     self.buttonpalettemaxlen = [min(30,max(6,toInt(x))) for x in toList(settings.value("buttonpalettemaxlen",self.buttonpalettemaxlen))]
                     self.buttonpalette = toList(settings.value("buttonpalette",self.buttonpalette))
                     if self.buttonpalette is None:
-                        self.buttonpalette = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]] # initialize empty palettes
+                        self.buttonpalette = [[],[],[],[],[],[],[],[],[],[]] # initialize empty palettes
                     else:
                         self.buttonpalette = self.buttonpalette[:10] # maximal 10 palettes are supported
                     for i in range(len(self.buttonpalette)):
                         if self.buttonpalette[i] is None:
-                            self.buttonpalette[i] = []
+                            self.buttonpalette[i] = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],""]
+                        if len(self.buttonpalette[i]) != 26:
+                            self.buttonpalette[i] = self.buttonpalette[i] + [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],""][len(self.buttonpalette[i]):]
                 for i in range(len(self.extraeventsactionstrings)):
                     self.extraeventsactionstrings[i] = self.extraeventsactionstrings[i]
                     self.extraeventslabels[i] = self.extraeventslabels[i]
@@ -27824,6 +28209,8 @@ class ApplicationWindow(QMainWindow):
                     self.eventbuttontablecolumnwidths = [toInt(x) for x in toList(settings.value("eventbuttontablecolumnwidths",self.eventbuttontablecolumnwidths))]
                 if settings.contains("buttonsize"):
                     self.buttonsize = toInt(settings.value("buttonsize",self.buttonsize))
+                if settings.contains("buttonpalette_label"):
+                    self.buttonpalette_label = toString(settings.value("buttonpalette_label",self.buttonpalette_label))
             settings.endGroup()
             # Extras more info
             settings.beginGroup("ExtrasMoreInfo")
@@ -28640,6 +29027,8 @@ class ApplicationWindow(QMainWindow):
             settings.beginGroup("ArduinoPID")
             settings.setValue("pidOnCHARGE",aw.pidcontrol.pidOnCHARGE)
             settings.setValue("loadRampSoakFromProfile",aw.pidcontrol.loadRampSoakFromProfile)
+            settings.setValue("loadRampSoakFromBackground",aw.pidcontrol.loadRampSoakFromBackground)
+            settings.setValue("svLabel",aw.pidcontrol.svLabel)
             settings.setValue("svValues",aw.pidcontrol.svValues)
             settings.setValue("svRamps",aw.pidcontrol.svRamps)
             settings.setValue("svSoaks",aw.pidcontrol.svSoaks)
@@ -28666,6 +29055,7 @@ class ApplicationWindow(QMainWindow):
             settings.setValue("invertControl",aw.pidcontrol.invertControl)
             settings.setValue("pOnE",aw.pidcontrol.pOnE)
             for n in range(aw.pidcontrol.RSLen):
+                settings.setValue("RS_svLabel"+str(n),aw.pidcontrol.RS_svLabels[n])
                 settings.setValue("RS_svValues"+str(n),aw.pidcontrol.RS_svValues[n])
                 settings.setValue("RS_svRamps"+str(n),aw.pidcontrol.RS_svRamps[n])
                 settings.setValue("RS_svSoaks"+str(n),aw.pidcontrol.RS_svSoaks[n])
@@ -28798,6 +29188,7 @@ class ApplicationWindow(QMainWindow):
             settings.endGroup()
             #save alarms
             settings.beginGroup("Alarms")
+            settings.setValue("alarmsetlabel",self.qmc.alarmsetlabel)
             settings.setValue("alarmflag",self.qmc.alarmflag)
             settings.setValue("alarmguard",self.qmc.alarmguard)
             settings.setValue("alarmnegguard",self.qmc.alarmnegguard)
@@ -28814,6 +29205,8 @@ class ApplicationWindow(QMainWindow):
             settings.setValue("alarmsfile",self.qmc.alarmsfile)
             settings.setValue("alarm_popup_timout",self.qmc.alarm_popup_timout)
             settings.setValue("alarmtablecolumnwidths",self.qmc.alarmtablecolumnwidths)
+            settings.setValue("alarmsets",self.qmc.alarmsets)
+            settings.setValue("alarmsetlabel",self.qmc.alarmsetlabel)
             settings.endGroup()
             settings.setValue("profilepath",self.userprofilepath)
             settings.setValue("settingspath",self.settingspath)
@@ -28973,6 +29366,7 @@ class ApplicationWindow(QMainWindow):
             settings.setValue("buttonpalette_shortcuts",self.buttonpalette_shortcuts)
             settings.setValue("eventbuttontablecolumnwidths",self.eventbuttontablecolumnwidths)
             settings.setValue("buttonsize",self.buttonsize)
+            settings.setValue("buttonpalette_label",self.buttonpalette_label)
             settings.endGroup()
             settings.beginGroup("RoRlimits")
             settings.setValue("RoRlimitFlag",self.qmc.RoRlimitFlag)
@@ -32697,6 +33091,7 @@ class ApplicationWindow(QMainWindow):
         self.qmc.AUCbackground = -1
         self.qmc.l_background_annotations = []
         self.qmc.analysisresultsstr = ""
+        self.qmc.resetlinecountcaches()
 
     @pyqtSlot()
     @pyqtSlot(bool)
@@ -32818,7 +33213,7 @@ class ApplicationWindow(QMainWindow):
     @pyqtSlot(bool)
     def alarmconfig(self,_=False):
         if self.qmc.device != 18 or aw.simulator is not None:
-            dialog = AlarmDlg(self,self)
+            dialog = AlarmDlg(self,self,self.AlarmDlg_activeTab)
             dialog.show()
         else:
             QMessageBox.information(aw,QApplication.translate("Message", "Alarm Config",None),
@@ -34114,6 +34509,13 @@ class ApplicationWindow(QMainWindow):
             except:
                 pass
 
+    # returns the palette named label or None
+    def findPalette(self,label):
+        for i in range(len(self.buttonpalette)):
+            if self.buttonpalette[i][25] == label:
+                return i
+        return None
+    
     #transfers current buttons to a palette number
     def transferbuttonsto(self,pindex):
         copy = []
@@ -34141,20 +34543,23 @@ class ApplicationWindow(QMainWindow):
         # added slider min/max
         copy.append(self.eventslidermin[:])
         copy.append(self.eventslidermax[:])
-        # added slider Bernoulli
-        copy.append(self.eventsliderBernoulli[:])
         # added slider coarse
         copy.append(self.eventslidercoarse[:])
         # added slider temp
         copy.append(self.eventslidertemp[:])
         # added slider unit
         copy.append(self.eventsliderunits[:])
+        # added slider Bernoulli
+        copy.append(self.eventsliderBernoulli[:])
+        # palette label
+        copy.append(self.buttonpalette_label)
 
         self.buttonpalette[pindex] = copy[:]
         self.buttonpalettemaxlen[pindex] = self.buttonlistmaxlen
         self.sendmessage(QApplication.translate("Message","Buttons copied to Palette #%i"%(pindex), None))
 
     #restores a palette number to current buttons
+    @pyqtSlot(int)
     def setbuttonsfrom(self,pindex):
         copy = self.buttonpalette[pindex][:]
         if len(copy):
@@ -34188,7 +34593,6 @@ class ApplicationWindow(QMainWindow):
                 self.eventsliderfactors = copy[13][:]
             else:
                 self.eventsliderfactors = [1.0,1.0,1.0,1.0]
-
             if len(copy)>14 and len(copy[14]) == 4:
                 self.eventquantifieractive = copy[14][:]
             else:
@@ -34233,6 +34637,11 @@ class ApplicationWindow(QMainWindow):
                 self.eventsliderBernoulli = copy[24][:]
             else:
                 self.eventsliderBernoulli = [0,0,0,0]
+            # palette label
+            if len(copy)>25:
+                self.buttonpalette_label = copy[25]
+            else:
+                self.buttonpalette_label = self.aw.buttonpalette_default_label
 
             self.buttonlistmaxlen = self.buttonpalettemaxlen[pindex]
             self.realignbuttons()
@@ -34293,7 +34702,7 @@ class ApplicationWindow(QMainWindow):
                 buttonpalettemaxlen = list(map(int,palette["maxlen"]))
                 for i in range(10):  #10 palettes (0-9)
                     key = str(i)
-                    nextpalette = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []]
+                    nextpalette = [[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], [], self.buttonpalette_default_label]
                     palette[key] = self.decodeTreeStrings(palette[key])
                     if len(palette[key]):
                         for x in range(9):
@@ -34312,7 +34721,7 @@ class ApplicationWindow(QMainWindow):
                             nextpalette[12] = list(map(int,palette[key][12]))   #  type int
                             nextpalette[13] = list(map(float,palette[key][13])) #  type double
                         else:
-                            for k in range(9,25):
+                            for k in range(9,26):
                                 if len(pal[i]) == k+1:
                                     nextpalette[k] = pal[i][k]
                         
@@ -34325,19 +34734,22 @@ class ApplicationWindow(QMainWindow):
                             nextpalette[19] = list(map(int,palette[key][19]))     #  type int
                             nextpalette[20] = list(map(int,palette[key][20]))     #  type int
                         else:
-                            for k in range(14,25):
+                            for k in range(14,26):
                                 if len(pal[i]) == k+1:
                                     nextpalette[k] = pal[i][k]
 
-                        if len(palette[key])==25:
+                        if len(palette[key])>=25:
                             nextpalette[21] = list(map(int,palette[key][21]))     #  type int
                             nextpalette[22] = list(map(int,palette[key][22]))     #  type int
                             nextpalette[23] = list(map(str,palette[key][23]))     #  type unicode
                             nextpalette[24] = list(map(int,palette[key][24]))     #  type int
                         else:
-                            for k in range(21,25):
+                            for k in range(21,26):
                                 if len(pal[i]) == k+1:
                                     nextpalette[k] = pal[i][k]
+
+                        if len(palette[key])==26:
+                            nextpalette[25] = str(palette[key][25])               #  type unicode
 
                     pal[i] = nextpalette[:]
                 return buttonpalettemaxlen
@@ -34379,6 +34791,10 @@ class ApplicationWindow(QMainWindow):
             aw.qmc.alarmaction = alarms["alarmactions"]
             aw.qmc.alarmbeep = alarms["alarmbeep"]
             aw.qmc.alarmstrings = alarms["alarmstrings"]
+            try:
+                aw.qmc.alarmsetlabel = alarms["alarmsetlabel"]
+            except:
+                aw.qmc.alarmsetlabel = ""
             message =QApplication.translate("Message","Alarms loaded", None)
             self.sendmessage(message)
         except IOError as ex:

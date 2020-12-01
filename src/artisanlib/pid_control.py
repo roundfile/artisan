@@ -3,7 +3,7 @@
 # ABOUT
 # Artisan PID Controllers (Fuji, DTA, Arduino TC4)
 
-# LICENSE
+# LICENSEsvLen
 # This program or module is free software: you can redistribute it and/or
 # modify it under the terms of the GNU General Public License as published
 # by the Free Software Foundation, either version 2 of the License, or
@@ -1067,7 +1067,9 @@ class PIDcontrol(object):
         #
         self.pidOnCHARGE = False
         self.loadRampSoakFromProfile = False
+        self.loadRampSoakFromBackground = False
         self.svLen = 8 # should stay at 8 for compatibility reasons!
+        self.svLabel = ""
         self.svValues = [0]*self.svLen # sv temp as int per 8 channels
         self.svRamps = [0]*self.svLen  # seconds as int per 8 channels
         self.svSoaks = [0]*self.svLen  # seconds as int per 8 channels
@@ -1078,6 +1080,7 @@ class PIDcontrol(object):
         self.svTriggeredAlarms = [False]*self.svLen # set to true once the corresponding alarm was triggered
         # extra RS sets:
         self.RSLen = 3 # can be changed to have less or more RSn sets
+        self.RS_svLabels = [""]*self.RSLen # label of the RS set
         self.RS_svValues = [[0]*self.svLen]*self.RSLen  # sv temp as int per 8 channels
         self.RS_svRamps = [[0]*self.svLen]*self.RSLen  # seconds as int per 8 channels
         self.RS_svSoaks = [[0]*self.svLen]*self.RSLen  # seconds as int per 8 channels
@@ -1179,6 +1182,7 @@ class PIDcontrol(object):
 
     def conv2celsius(self):
         try:
+            self.aw.qmc.rampSoakSemaphore.acquire(1)
             self.svValue = int(round(fromFtoC(self.svValue)))
             self.svSliderMin = int(round(fromFtoC(self.svSliderMin)))
             self.svSliderMax = int(round(fromFtoC(self.svSliderMax)))
@@ -1188,13 +1192,22 @@ class PIDcontrol(object):
             self.pidKp = self.pidKp * (9/5.)
             self.pidKi = self.pidKi * (9/5.)
             self.pidKd = self.pidKd * (9/5.)
-            for i in range(self.svValues):
-                self.svValues[i] = fromFtoC(self.svValues[i])
-        except Exception:
+            for i in range(len(self.svValues)):
+                if self.svValues[i] != 0:
+                    self.svValues[i] = fromFtoC(self.svValues[i])
+            for n in range(len(self.RS_svValues)):
+                for j in range(len(self.RS_svValues[n])):
+                    if self.RS_svValues[n][j] != 0:
+                        self.RS_svValues[n][j] = fromFtoC(self.RS_svValues[n][j])
+        except:
             pass
+        finally:
+            if self.aw.qmc.rampSoakSemaphore.available() < 1:
+                self.aw.qmc.rampSoakSemaphore.release(1)
     
     def conv2fahrenheit(self):
         try:
+            self.aw.qmc.rampSoakSemaphore.acquire(1)
             self.svValue = fromCtoF(self.svValue)
             self.svSliderMin = fromCtoF(self.svSliderMin)
             self.svSliderMax = fromCtoF(self.svSliderMax)
@@ -1204,18 +1217,27 @@ class PIDcontrol(object):
             self.pidKp = self.pidKp / (9/5.)
             self.pidKi = self.pidKi / (9/5.)
             self.pidKd = self.pidKd / (9/5.)
-            for i in range(self.svValues):
-                self.svValues[i] = fromCtoF(self.svValues[i])
-        except Exception:
+            for i in range(len(self.svValues)):
+                if self.svValues[i] != 0:
+                    self.svValues[i] = fromCtoF(self.svValues[i])
+            for n in range(len(self.RS_svValues)):
+                for j in range(len(self.RS_svValues[n])):
+                    if self.RS_svValues[n][j] != 0:
+                        self.RS_svValues[n][j] = fromCtoF(self.RS_svValues[n][j])
+        except:
             pass
+        finally:
+            if self.aw.qmc.rampSoakSemaphore.available() < 1:
+                self.aw.qmc.rampSoakSemaphore.release(1)
         
     def togglePID(self):
         if self.pidActive:
             self.pidOff()
         else:
             self.pidOn()
-
-    def pidOn(self):
+    
+    # initializes the PID mode on PID ON and switch of mode
+    def pidModeInit(self):
         if self.aw.qmc.flagon:
             self.current_ramp_segment = 0
             self.current_soak_segment = 0
@@ -1227,6 +1249,15 @@ class PIDcontrol(object):
                 self.time_pidON = 0
             else:
                 self.time_pidON = self.aw.qmc.on_timex[-1]
+                if self.svMode == 1:
+                    # turn the timer LCD color blue if in RS mode and not recording
+                    self.aw.lcd1.setStyleSheet("QLCDNumber { border-radius: 4; color: %s; background-color: %s;}"%(self.aw.lcdpaletteF["rstimer"],self.aw.lcdpaletteB["rstimer"]))
+                    self.aw.qmc.setTimerLargeLCDcolorSignal.emit(self.aw.lcdpaletteF["rstimer"],self.aw.lcdpaletteB["rstimer"])
+
+    def pidOn(self):
+        if self.aw.qmc.flagon:
+            self.pidModeInit()
+                    
             self.aw.qmc.temporayslider_force_move = True
             self.lastEnergy = None
             # TC4 hardware PID
@@ -1273,9 +1304,11 @@ class PIDcontrol(object):
                 self.aw.button_10.setStyleSheet(self.aw.pushbuttonstyles["PIDactive"])
 
     def pidOff(self):
+        self.aw.sendmessage(QApplication.translate("Message","PID OFF", None))
+        self.aw.lcd1.setStyleSheet("QLCDNumber { border-radius: 4; color: %s; background-color: %s;}"%(self.aw.lcdpaletteF["timer"],self.aw.lcdpaletteB["timer"]))
+        self.aw.qmc.setTimerLargeLCDcolorSignal.emit(self.aw.lcdpaletteF["timer"],self.aw.lcdpaletteB["timer"])
         if self.aw.qmc.flagon and not self.aw.qmc.flagstart:
-            self.aw.sendmessage(QApplication.translate("Message","PID OFF", None))
-            self.aw.qmc.setLCDtime(0)       
+            self.aw.qmc.setLCDtime(0)
         # MODBUS hardware PID
         if (self.aw.pidcontrol.externalPIDControl() == 1 and self.aw.modbus.PID_OFF_action and self.aw.modbus.PID_OFF_action != ""):
             self.aw.eventaction(4,self.aw.modbus.PID_OFF_action)
@@ -1326,50 +1359,54 @@ class PIDcontrol(object):
     # returns SV (or None) wrt. to the ramp-soak table and the given time t
     # (used only internally)
     def svRampSoak(self,t):
-        if self.ramp_soak_engaged == 0:
-            return None
-        else:
-            self.aw.qmc.setLCDtime(self.RS_total_time-t)
-            segment_end_time = 0 # the (end) time of the segments
-            prev_segment_end_time = 0 # the (end) time of the previous segment
-            segment_start_sv = 0 # the (target) sv of the segment
-            prev_segment_start_sv = 0 # the (target) sv of the previous segment
-            for i in range(len(self.svValues)):
-                # Ramp
-                if self.svRamps[i] != 0:
-                    segment_end_time = segment_end_time + self.svRamps[i]
-                    segment_start_sv = self.svValues[i]
-                    if segment_end_time > t:
-                        # t is within the current segment
-                        k = float(segment_start_sv - prev_segment_start_sv) / float(segment_end_time - prev_segment_end_time)                        
-                        if self.current_ramp_segment != i+1:
-                            self.aw.sendmessage(QApplication.translate("Message","Ramp {0}: in {1} to SV {2}".format(i+1,stringfromseconds(self.svRamps[i]),self.svValues[i]), None))
-                            self.current_ramp_segment = i+1
-                        return prev_segment_start_sv + k*(t - prev_segment_end_time)
-                prev_segment_end_time = segment_end_time
-                prev_segment_start_sv = segment_start_sv
-                # Soak
-                if self.svSoaks[i] != 0:
-                    segment_end_time = segment_end_time + self.svSoaks[i]
-                    segment_start_sv = self.svValues[i]
-                    if segment_end_time > t:
-                        # t is within the current segment
-                        if self.current_soak_segment != i+1:
-                            self.current_soak_segment = i+1
-                            self.aw.sendmessage(QApplication.translate("Message","Soak {0}: for {1} at SV {2}".format(i+1,stringfromseconds(self.svSoaks[i]),self.svValues[i]), None))
-                        return prev_segment_start_sv
-                prev_segment_end_time = segment_end_time
-                prev_segment_start_sv = segment_start_sv
-                if (self.current_ramp_segment > i or self.current_soak_segment > 1) and not self.svTriggeredAlarms[i]:
-                    self.svTriggeredAlarms[i] = True
-                    if self.svActions[i] > -1:
-                        self.aw.qmc.processAlarmSignal.emit(0,self.svBeeps[i],self.svActions[i],self.svDescriptions[i])
-                        #self.aw.qmc.processAlarm(0,self.svBeeps[i],self.svActions[i],self.svDescriptions[i])
-            self.aw.sendmessage(QApplication.translate("Message","Ramp/Soak pattern finished", None))
-            self.aw.qmc.setLCDtime(0)       
-            self.ramp_soak_engaged = 0 # stop the ramp/soak process
-            # fire RS-finished action
-            return None
+        try:
+            self.aw.qmc.rampSoakSemaphore.acquire(1)
+            if self.ramp_soak_engaged == 0:
+                return None
+            else:
+                if self.aw.qmc.flagon and not self.aw.qmc.flagstart:
+                    self.aw.qmc.setLCDtime(self.RS_total_time-t)
+                segment_end_time = 0 # the (end) time of the segments
+                prev_segment_end_time = 0 # the (end) time of the previous segment
+                segment_start_sv = 0 # the (target) sv of the segment
+                prev_segment_start_sv = 0 # the (target) sv of the previous segment
+                for i in range(len(self.svValues)):
+                    # Ramp
+                    if self.svRamps[i] != 0:
+                        segment_end_time = segment_end_time + self.svRamps[i]
+                        segment_start_sv = self.svValues[i]
+                        if segment_end_time > t:
+                            # t is within the current segment
+                            k = float(segment_start_sv - prev_segment_start_sv) / float(segment_end_time - prev_segment_end_time)                        
+                            if self.current_ramp_segment != i+1:
+                                self.aw.sendmessage(QApplication.translate("Message","Ramp {0}: in {1} to SV {2}".format(i+1,stringfromseconds(self.svRamps[i]),self.svValues[i]), None))
+                                self.current_ramp_segment = i+1
+                            return prev_segment_start_sv + k*(t - prev_segment_end_time)
+                    prev_segment_end_time = segment_end_time
+                    prev_segment_start_sv = segment_start_sv
+                    # Soak
+                    if self.svSoaks[i] != 0:
+                        segment_end_time = segment_end_time + self.svSoaks[i]
+                        segment_start_sv = self.svValues[i]
+                        if segment_end_time > t:
+                            # t is within the current segment
+                            if self.current_soak_segment != i+1:
+                                self.current_soak_segment = i+1
+                                self.aw.sendmessage(QApplication.translate("Message","Soak {0}: for {1} at SV {2}".format(i+1,stringfromseconds(self.svSoaks[i]),self.svValues[i]), None))
+                            return prev_segment_start_sv
+                    prev_segment_end_time = segment_end_time
+                    prev_segment_start_sv = segment_start_sv
+                    if (self.current_ramp_segment > i or self.current_soak_segment > 1) and not self.svTriggeredAlarms[i]:
+                        self.svTriggeredAlarms[i] = True
+                        if self.svActions[i] > -1:
+                            self.aw.qmc.processAlarmSignal.emit(0,self.svBeeps[i],self.svActions[i],self.svDescriptions[i])
+                self.aw.sendmessage(QApplication.translate("Message","Ramp/Soak pattern finished", None))
+                self.aw.qmc.setLCDtime(0)       
+                self.ramp_soak_engaged = 0 # stop the ramp/soak process
+                return None
+        finally:
+            if self.aw.qmc.rampSoakSemaphore.available() < 1:
+                self.aw.qmc.rampSoakSemaphore.release(1)
     
     def smooth_sv(self,sv):
         if self.sv_smoothing_factor:
@@ -1498,7 +1535,9 @@ class PIDcontrol(object):
     # set RS patterns from one of the RS sets
     def setRSpattern(self,n):
         try:
+            self.aw.qmc.rampSoakSemaphore.acquire(1)
             if n < self.RSLen:
+                self.svLabel = self.RS_svLabels[n]
                 self.svValues = self.RS_svValues[n]
                 self.svRamps = self.RS_svRamps[n]
                 self.svSoaks = self.RS_svSoaks[n]
@@ -1507,8 +1546,24 @@ class PIDcontrol(object):
                 self.svDescriptions = self.RS_svDescriptions[n]
         except:
             pass
+        finally:
+            if self.aw.qmc.rampSoakSemaphore.available() < 1:
+                self.aw.qmc.rampSoakSemaphore.release(1)
+    
+    # returns the first RS patterrn idx with label or None
+    def findRSset(self,label):
+        try:
+            self.aw.qmc.rampSoakSemaphore.acquire(1)
+            return self.RS_svLabels.index(label)
+        except:
+            return None
+        finally:
+            if self.aw.qmc.rampSoakSemaphore.available() < 1:
+                self.aw.qmc.rampSoakSemaphore.release(1)
     
     def adjustsv(self,diff):
+        if self.sv is None or self.sv<0:
+            self.sv = 0
         self.setSV(self.sv + diff,True)
     
     def activateSVSlider(self,flag):
