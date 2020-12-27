@@ -5,7 +5,7 @@ set -e  # reduced logging
 
 # add argument "legacy" to make a build that supports older OS X systems using an outdated Qt
 
-if [ ! -z $TRAVIS ]; then
+if [ ! -z $APPVEYOR ]; then
     # Travis CI builds
     export PYTHON=/usr/local
     export PYTHONBIN=$PYTHON/bin
@@ -44,7 +44,7 @@ export DYLD_FRAMEWORK_PATH=$QT_PATH/lib
 # translations
 $PYTHONBIN/pylupdate5 artisan.pro
 # there is no full Qt installation on Travis, thus don't run  lrelease
-if [ -z $TRAVIS ]; then
+if [ -z $APPVEYOR ]; then
     $QT_SRC_PATH/bin/lrelease -verbose artisan.pro || true
     for f in translations/qtbase_*.ts
     do

@@ -620,6 +620,8 @@ from artisanlib.wheels import WheelDlg
 from artisanlib.colors import graphColorDlg
 from artisanlib.statistics import StatisticsDlg
 from artisanlib.phases import phasesGraphDlg
+#dave
+from artisanlib.sustainability import sustainabilityDlg
 from artisanlib.calculator import calculatorDlg
 from artisanlib.axis import WindowsDlg
 from artisanlib.batches import batchDlg
@@ -2213,7 +2215,23 @@ class tgraphcanvas(FigureCanvas):
         self.statssummary = False
         self.showtimeguide = True
         self.statsmaxchrperline = 30
-
+        
+        #dave
+        #Sustainability
+        self.loadsustainabilityfromprofile = False
+        self.heatunits = ["BTU", "kJ", "kWh"]  #dave should these be translated?
+        self.fueltypes = ["LP", "NG", "Elec Coal"]  #dave should these be translated?
+        #should the next settings go into the alog?  Yes into the settings file
+        self.burnerrating = 10000        #in BTU
+        self.ratingunit = "BTU"          # item in list self.heatunits 
+        self.fueltype = "LP"             # item in list self.fueltypes
+        self.burner_etype = 0            # index of the etype that is the gas/burner setting
+        self.burnerevent_zeropct = 0     # event value ccrresponding to 0 percent
+        self.burnerevent_hundpct = 100   # event value ccrresponding to 100 percent
+        self.btu_betweenbatch = 1000     # estimated BTUs from between batch protocol to add to the batch 
+        self.btu_warmup       = 10000    # estimated portion of BTUs from warm up per batch to add to each batch
+        self.roasts_per_session = 4      # typical number of roasts in a session
+        
         #mouse cross lines measurement
         self.baseX,self.baseY = None, None
         self.base_horizontalcrossline, self.base_verticalcrossline = None, None
@@ -11486,6 +11504,127 @@ class tgraphcanvas(FigureCanvas):
             _, _, exc_tb = sys.exc_info()
             aw.qmc.adderror((QApplication.translate("Error Message","Exception:",None) + " writestatistics() {0}").format(str(ex)),exc_tb.tb_lineno)
 
+    #dave
+    def convertHeat(self,value,fromUnit,toUnit="btu"):
+        if value in [-1,None]:
+            return value
+        conversion = {"kj": {"btu":0.9478,"kj":1.,"kwh":0.0002778},
+                      "kwh":{"btu":3412.1416,"kj":3600.,"kwh":1.},
+                      "btu":{"btu":1.,"kwh":0.0002931,"kj":1.0551}}
+        return value * conversion[fromUnit.lower()][toUnit.lower()]
+
+    #dave
+    @pyqtSlot()
+    @pyqtSlot(bool)
+    def calcsustainability(self,_=False):
+        try:
+            sustainabilitymetrics = {}
+            btu_list = []
+            if len(self.timex) == 0:
+                aw.sendmessage(QApplication.translate("Message","No profile data", None),append=False)
+                print("No timex() values") #dave
+                return
+
+            #reference: https://www.eia.gov/environment/emissions/co2_vol_mass.php
+            LP_kg_per_btu = 6.307e-05
+            NG_kg_per_btu = 5.307e-05
+            CO2kg_per_btu_ElecCoal = 0.94  # https://carbonpositivelife.com/co2-per-kwh-of-electricity/
+
+            # entries must match those in self.fueltypes
+            CO2kg_per_BTU = {"LP":6.307e-05, "NG":5.307e-05, "Elec Coal":0.94}
+
+            # true if bernoulli set for the burner slider
+            bernoulli = aw.eventsliderBernoulli[self.burner_etype]
+
+            # init the prev_burnertime to drop if it exists or to the end of profile time
+            if self.timeindex[6] > 0:
+                prev_burnertime = self.timex[self.timeindex[6]]
+            else:
+                prev_burnertime = self.timex[-1]
+                aw.sendmessage(QApplication.translate("Message","Profile has no DROP event", None),append=False)
+                print("No DROP event")  #dave
+
+            output_list = []
+            total_btus = 0
+#            total_CO2g = 0  #dave, needed only for console output
+            # iterate in reverse from DROP to the first event
+            for i in range(len(self.specialevents) - 1, -1, -1):
+                if self.specialeventstype[i] == self.burner_etype:  #Gas setting for Dave's setup
+                    burnertime = self.timex[self.specialevents[i]]
+                    # exclude heat before charge event
+                    if self.timeindex[0] > -1 and burnertime <= self.timex[self.timeindex[0]]:
+                        if prev_burnertime <= self.timex[self.timeindex[0]]:
+                            break
+                        else:
+                            burnertime = self.timex[self.timeindex[0]]
+                    duration = prev_burnertime - burnertime
+                    # exclude heat after drop event
+                    if duration < 0:
+                        continue
+                    prev_burnertime = burnertime
+                    # scale the burner setting for 0-100%
+                    val = (self.specialeventsvalue[i] - 1) * 10
+                    emin = toInt(self.burnerevent_zeropct)
+                    emax = toInt(self.burnerevent_hundpct)
+                    scaled = (val - emin) / (emax - emin)  #emax > emin enforced by sustainability.py
+                    burner_pct = min(1,max(0,scaled)) * 100
+                    # percent factor based on bernoulli setting for burner event slider
+                    if aw.eventsliderBernoulli[self.burner_etype]:
+                        factor = (burner_pct / 100)
+                    else:
+                        factor = math.sqrt(burner_pct / 100)
+                    
+                    BTUs = self.burnerrating * factor * (duration / 3600) * self.convertHeat(1,self.ratingunit,"BTU")
+                    CO2g = BTUs * CO2kg_per_BTU[self.fueltype] * 1000
+                    total_btus += BTUs
+                    btu_list.append({"burner_pct":burner_pct,"duration":duration,"BTUs":BTUs,"CO2g":CO2g})
+
+                    #dave for output to the console
+#                    total_CO2g += CO2g
+                    outmsg = "{:9.2f}s  {:7.0f}%  {:9.2f}  {:9.2f}".format(duration, burner_pct, BTUs, CO2g)
+                    output_list.append(outmsg)
+
+            #reverse the list
+            btu_list.reverse()
+
+            # add extimates per batch
+            total_btus += self.btu_betweenbatch
+            total_btus += self.btu_warmup / self.roasts_per_session
+            total_CO2g = total_btus * 1000 * CO2kg_per_BTU[self.fueltype]
+            sustainabilitymetrics["BTU"] = total_btus
+            sustainabilitymetrics["CO2g"] = total_CO2g
+
+            #more metrics
+            if self.weight[1] != 0.0:  #weightout
+                weightout = aw.float2float(aw.convertWeight(self.weight[1],self.weight_units.index(self.weight[2]),0),1) # in g
+                sustainabilitymetrics["CO2g_perRoastedkg"] = aw.float2float(sustainabilitymetrics["CO2g"]/(weightout/1000), 1)
+            elif self.weight[0] != 0.0: #weightin assuming 17% weight loss
+                weightin = aw.float2float(aw.convertWeight(self.weight[0],self.weight_units.index(self.weight[2]),0),1) # in g
+                sustainabilitymetrics["CO2g_perRoastedkg"] = aw.float2float(sustainabilitymetrics["CO2g"]/(0.83 * weightin/1000), 1)
+            else:
+                sustainabilitymetrics["CO2g_perRoastedkg"] = 0
+
+            #print data to console
+            print("  Duration    Burner       BTUs  Grams CO2")  #dave
+            #reverse the output messages
+            for i in range(len(output_list) - 1, -1, -1):
+                print(output_list[i])  #dave
+            print("Total BTUs {:9.2f}  Total Grams CO2 {:9.2f}".format(total_btus, total_CO2g))  #dave
+            print("Added: Between Batch BTUs {:6d},  Warm up per batch BTUs {:.0f}".format(self.btu_betweenbatch,self.btu_warmup  / self.roasts_per_session))  #dave
+            print("Grand Total BTUs {:9.2f}  Total Grams CO2 {:9.2f}".format(total_btus, total_CO2g))  #dave
+            if "CO2g" in sustainabilitymetrics:
+                print("CO2g_perRoastedkg",sustainabilitymetrics["CO2g_perRoastedkg"])  #dave
+            print("")  #dave
+            
+        except Exception as ex:
+            #import traceback
+            #traceback.print_exc(file=sys.stdout)
+            _, _, exc_tb = sys.exc_info()
+            aw.qmc.adderror((QApplication.translate("Error Message","Exception:",None) + " calcsustainability() {0}").format(str(ex)),exc_tb.tb_lineno)
+        finally:
+            return sustainabilitymetrics,btu_list
+
+
     #used in EventRecord()
     def restorebutton_11(self):
         aw.button_11.setDisabled(False)
@@ -14652,6 +14791,8 @@ class ApplicationWindow(QMainWindow):
         self.backgroundDlg_activeTab = 0
         self.DeviceAssignmentDlg_activeTab = 0
         self.AlarmDlg_activeTab = 0
+        #dave
+        self.sustainabilityDlg_activeTab = 0 # sustainability dialog
 
         #flag to reset Qsettings
         self.resetqsettings = 0
@@ -15265,6 +15406,13 @@ class ApplicationWindow(QMainWindow):
         self.oversamplingAction.setChecked(self.qmc.oversampling)
         self.ConfMenu.addAction(self.oversamplingAction)
 
+        self.ConfMenu.addSeparator()
+
+        #dave
+        self.sustainabilityAction = QAction(UIconst.CONF_MENU_SUSTAINABILITY,self)
+#        self.sustainabilityAction.triggered.connect(self.qmc.calcsustainability)
+        self.sustainabilityAction.triggered.connect(self.sustainabilityconf)
+        self.ConfMenu.addAction(self.sustainabilityAction)
         self.ConfMenu.addSeparator()
 
         self.hudAction = QAction(UIconst.CONF_MENU_CURVES,self)
@@ -20539,7 +20687,7 @@ class ApplicationWindow(QMainWindow):
     #         20= Artisan Command; 21= RC Command; 22= WebSocket Command
     def eventaction(self,action,cmd,parallel=True):
         if action:
-            if not parallel or action==3: # subactions of multiple event actions, may crash if run in parallel, especially if they update the UI like button shape!
+            if not parallel:# or action==3: # subactions of multiple event actions, may crash if run in parallel, especially if they update the UI like button shape!
                 self.eventaction_internal(action,cmd,doupdategraphics=True,doupdatebackground=True)
             else:
                 eventActionThread = EventActionThread(action,cmd)
@@ -23814,6 +23962,27 @@ class ApplicationWindow(QMainWindow):
         if "svDescriptions" in profile:
             self.pidcontrol.svDescriptions = [str(x) for x in profile["svDescriptions"]]
 
+    #dave 
+    def loadSustainabilityFromProfile(self,profile):
+        if "burnerrating" in profile:
+            self.qmc.burnerrating = profile["burnerrating"]
+        if "ratingunit" in profile:
+            self.qmc.ratingunit = profile["ratingunit"]
+        if "fueltype" in profile:
+            self.qmc.fueltype = profile["fueltype"]
+        if "burner_etype" in profile:
+            self.qmc.burner_etype = profile["burner_etype"]
+        if "burnerevent_zeropct" in profile:
+            self.qmc.burnerevent_zeropct = profile["burnerevent_zeropct"]
+        if "burnerevent_hundpct" in profile:
+            self.qmc.burnerevent_hundpct = profile["burnerevent_hundpct"]
+        if "btu_betweenbatch" in profile:
+            self.qmc.btu_betweenbatch = profile["btu_betweenbatch"]
+        if "btu_warmup" in profile:
+            self.qmc.btu_warmup = profile["btu_warmup"]
+        if "roasts_per_session" in profile:
+            self.qmc.roasts_per_session = profile["roasts_per_session"]
+
     # returns True if data got updated, False otherwise
     def updateSymbolicETBT(self):
         try:
@@ -25956,6 +26125,12 @@ class ApplicationWindow(QMainWindow):
             # Ramp/Soak Profiles
             if self.pidcontrol.loadRampSoakFromProfile:
                 self.loadRampSoakFromProfile(filename,profile)
+
+            #dave
+            # Sustainability
+            if self.qmc.loadsustainabilityfromprofile:
+                self.loadSustainabilityFromProfile(profile)
+
             if "timeindex" in profile:
                 self.qmc.timeindex = [max(0,v) if i>0 else max(-1,v) for i,v in enumerate(profile["timeindex"])]
                 if self.qmc.locktimex:
@@ -26236,15 +26411,17 @@ class ApplicationWindow(QMainWindow):
                     computedProfile["organic_loss"] = self.float2float(weight_loss - moisture_loss)
             din = dout = 0
             # standardize unit of volume and weight to l and g
-            if volumein != 0.0 and volumeout != 0.0:
+            if volumein != 0.0:
                 volumein = self.float2float(aw.convertVolume(volumein,aw.qmc.volume_units.index(aw.qmc.volume[2]),0),4) # in l
+            if volumeout != 0.0:
                 volumeout = self.float2float(aw.convertVolume(volumeout,aw.qmc.volume_units.index(aw.qmc.volume[2]),0),4) # in l
             # store volume in l
             computedProfile["volumein"] = volumein
             computedProfile["volumeout"] = volumeout
             # store weight in kg
-            if weightin != 0.0 and weightout != 0.0:
+            if weightin != 0.0:
                 weightin = self.float2float(aw.convertWeight(weightin,aw.qmc.weight_units.index(aw.qmc.weight[2]),0),1) # in g
+            if weightout != 0.0:
                 weightout = self.float2float(aw.convertWeight(weightout,aw.qmc.weight_units.index(aw.qmc.weight[2]),0),1) # in g
             computedProfile["weightin"] = weightin
             computedProfile["weightout"] = weightout
@@ -26287,6 +26464,21 @@ class ApplicationWindow(QMainWindow):
                 computedProfile["dbt"] = dbt
         except Exception:
             pass
+        #dave
+        ######### Sustainability #########
+        try:
+            import inspect  #dave99
+            print("\n" + "computedProfileInformation" + " called by ",inspect.getframeinfo(inspect.currentframe().f_back)[2])  #dave99
+            sustainabilitymetrics,_ = self.qmc.calcsustainability()
+            if "BTU" in sustainabilitymetrics:
+                computedProfile["BTU"] = self.float2float(sustainabilitymetrics["BTU"],1)
+            if "CO2g" in sustainabilitymetrics:
+                computedProfile["CO2g"] = self.float2float(sustainabilitymetrics["CO2g"],1)
+            if "CO2g_perRoastedkg" in sustainabilitymetrics:
+                computedProfile["CO2g_perRoastedkg"] = self.float2float(sustainabilitymetrics["CO2g_perRoastedkg"],1)
+        except Exception as ex:
+            _, _, exc_tb = sys.exc_info()
+            aw.qmc.adderror((QApplication.translate("Error Message", "Exception:",None) + " computedProfileInformation() {0}").format(str(ex)),exc_tb.tb_lineno)
         ######### RETURN #########
         return computedProfile
 
@@ -26477,6 +26669,20 @@ class ApplicationWindow(QMainWindow):
                     profile["legendloc_pos"] = axis_to_data.transform(self.qmc.legend._loc).tolist()
                 except:
                     pass
+                    
+            #dave
+            try:
+                profile["burner_etype"] = self.qmc.burner_etype
+                profile["burnerrating"] = self.qmc.burnerrating
+                profile["btu_betweenbatch"] = self.qmc.btu_betweenbatch
+                profile["btu_warmup"] = self.qmc.btu_warmup
+                profile["ratingunit"] = self.qmc.ratingunit
+                profile["fueltype"] = self.qmc.fueltype
+                profile["burnerevent_zeropct"] = self.qmc.burnerevent_zeropct
+                profile["burnerevent_hundpct"] = self.qmc.burnerevent_hundpct
+                profile["roasts_per_session"] = self.qmc.roasts_per_session
+            except:
+                pass
             return profile
         except Exception as ex:
             _, _, exc_tb = sys.exc_info()
@@ -27881,6 +28087,33 @@ class ApplicationWindow(QMainWindow):
                 self.qmc.time_grid = bool(toBool(settings.value("time_grid",self.qmc.time_grid)))
             settings.endGroup()
 
+            #dave
+            settings.beginGroup("Sustainability")
+            if settings.contains("burnerrating"):
+                self.qmc.burnerrating = toInt(settings.value("burnerrating",self.qmc.burnerrating))
+            if settings.contains("burner_etype"):
+                self.qmc.burner_etype = toInt(settings.value("burner_etype",self.qmc.burner_etype))
+            if settings.contains("btu_betweenbatch"):
+                self.qmc.btu_betweenbatch = toInt(settings.value("btu_betweenbatch",self.qmc.btu_betweenbatch))
+            if settings.contains("btu_warmup"):
+                self.qmc.btu_warmup = toInt(settings.value("btu_warmup",self.qmc.btu_warmup))
+            if settings.contains("ratingunit"):
+                self.qmc.ratingunit = s2a(toString(settings.value("ratingunit",self.qmc.ratingunit)))
+#                self.qmc.ratingunit = toInt(settings.value("ratingunit",self.qmc.ratingunit))
+            if settings.contains("fueltype"):
+                self.qmc.fueltype = s2a(toString(settings.value("fueltype",self.qmc.fueltype)))
+#                self.qmc.fueltype = toInt(settings.value("fueltype",self.qmc.fueltype))
+            if settings.contains("burnerevent_zeropct"):
+                self.qmc.burnerevent_zeropct = toInt(settings.value("burnerevent_zeropct",self.qmc.burnerevent_zeropct))
+            if settings.contains("burnerevent_hundpct"):
+                self.qmc.burnerevent_hundpct = toInt(settings.value("burnerevent_hundpct",self.qmc.burnerevent_hundpct))
+            if settings.contains("roasts_per_session"):
+                self.qmc.roasts_per_session = toInt(settings.value("roasts_per_session",self.qmc.roasts_per_session))
+            if settings.contains("loadsustainabilityfromprofile"):
+                self.qmc.loadsustainabilityfromprofile = bool(toBool(settings.value("loadsustainabilityfromprofile",self.qmc.loadsustainabilityfromprofile)))
+
+            settings.endGroup()
+
             settings.beginGroup("RoastProperties")
             self.qmc.operator = toString(settings.value("operator",self.qmc.operator))
             if settings.contains("organization"):
@@ -29221,6 +29454,21 @@ class ApplicationWindow(QMainWindow):
             settings.setValue("temp_grid",self.qmc.temp_grid)
             settings.setValue("time_grid",self.qmc.time_grid)
             settings.endGroup()
+            
+            #dave
+            settings.beginGroup("Sustainability")
+            settings.setValue("burnerrating",self.qmc.burnerrating)
+            settings.setValue("burner_etype",self.qmc.burner_etype)
+            settings.setValue("btu_betweenbatch",self.qmc.btu_betweenbatch)
+            settings.setValue("btu_warmup",self.qmc.btu_warmup)
+            settings.setValue("ratingunit",self.qmc.ratingunit)
+            settings.setValue("fueltype",self.qmc.fueltype)
+            settings.setValue("burnerevent_zeropct",self.qmc.burnerevent_zeropct)
+            settings.setValue("burnerevent_hundpct",self.qmc.burnerevent_hundpct)
+            settings.setValue("roasts_per_session",self.qmc.roasts_per_session)
+            settings.setValue("loadsustainabilityfromprofile",self.qmc.loadsustainabilityfromprofile)
+            settings.endGroup()
+
             settings.beginGroup("RoastProperties")
             settings.setValue("drumspeed",self.qmc.drumspeed)
             settings.setValue("operator",self.qmc.operator)
@@ -33274,6 +33522,13 @@ class ApplicationWindow(QMainWindow):
             self.editgraphdialog.show()
             self.editgraphdialog = None
 
+    #dave
+    @pyqtSlot()
+    @pyqtSlot(bool)
+    def sustainabilityconf(self,_=False):
+        dialog = sustainabilityDlg(self,self,self.sustainabilityDlg_activeTab)
+        dialog.show()
+
     @pyqtSlot()
     @pyqtSlot(bool)
     def editphases(self,_=False):
@@ -34515,7 +34770,7 @@ class ApplicationWindow(QMainWindow):
             p.setText(l)
             p.setFocusPolicy(Qt.NoFocus)
             p.clicked.connect(self.recordextraevent_slot)
-            self.buttonlist.append(p)            
+            self.buttonlist.append(p)
             self.buttonStates.append(0)
             #add button to row
             if row1count < self.buttonlistmaxlen:
